@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#14B8A6"/>
+      <stop offset="100%" style="stop-color:#0D9488"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="url(#grad)"/>
+
+  <!-- Chef Hat -->
+  <g fill="white">
+    <!-- Hat brim/band -->
+    <rect x="16" y="42" width="32" height="6" rx="1" fill="white"/>
+
+    <!-- Hat body (trapezoid shape) -->
+    <path d="M 18 42 L 18 32 Q 18 30 20 30 L 44 30 Q 46 30 46 32 L 46 42 Z" fill="white"/>
+
+    <!-- Hat top puffs (rounded top) -->
+    <ellipse cx="20" cy="28" rx="5" ry="6" fill="white"/>
+    <ellipse cx="28" cy="25" rx="5.5" ry="7" fill="white"/>
+    <ellipse cx="36" cy="25" rx="5.5" ry="7" fill="white"/>
+    <ellipse cx="44" cy="28" rx="5" ry="6" fill="white"/>
+
+    <!-- Center puff (tallest) -->
+    <ellipse cx="32" cy="22" rx="6" ry="8" fill="white"/>
+  </g>
+</svg>
