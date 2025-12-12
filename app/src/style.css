@@ -1,0 +1,76 @@
+/* Schompf - Fresh & Modern Styles */
+
+:root {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #F0FDFA;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(13, 148, 136, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(13, 148, 136, 0.5);
+}
+
+/* Smooth transitions */
+.v-card,
+.v-btn,
+.v-list-item {
+  transition: all 0.2s ease;
+}
+
+/* Card hover effect */
+.v-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Fresh accent for active items */
+.v-list-item--active {
+  background: rgba(13, 148, 136, 0.1) !important;
+}
+
+/* Better focus states */
+:focus-visible {
+  outline: 2px solid #14B8A6;
+  outline-offset: 2px;
+}
+
+/* Mobile bottom nav padding */
+@media (max-width: 959px) {
+  .v-main {
+    padding-bottom: 72px !important;
+  }
+}
+
+/* Gap utility */
+.gap-1 { gap: 4px; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.gap-4 { gap: 16px; }

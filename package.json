@@ -1,0 +1,15 @@
+{
+  "name": "schompf-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Schompf - Meal Planning & Shopping List",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:app\" \"npm run dev:api\"",
+    "dev:app": "cd app && npm run dev",
+    "dev:api": "cd api && npm run dev",
+    "install:all": "npm install && cd app && npm install && cd ../api && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
