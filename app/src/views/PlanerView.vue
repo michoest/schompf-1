@@ -25,6 +25,13 @@ const showDishSelector = ref(false)
 const showCreateListDialog = ref(false)
 const showDeleteDialog = ref(false)
 const showCommittedMealSheet = ref(false)
+const showUncommittedMealSheet = ref(false)
+const showEatingOutMealSheet = ref(false)
+const showEditEatingOutDialog = ref(false)
+const editingEatingOutDescription = ref('')
+const showMoveMealDialog = ref(false)
+const moveToDate = ref(null)
+const moveToSlot = ref(null)
 const mealToDelete = ref(null)
 const listFromDate = ref(null)
 const listToDate = ref(null)
@@ -32,13 +39,36 @@ const listShoppingDate = ref(null)
 
 const windowWidth = ref(window.innerWidth)
 const isMobile = computed(() => windowWidth.value < 600)
+const editingMealId = computed(() => {
+  if (showUncommittedMealSheet.value && selectedMeal.value && !selectedMeal.value.isNew) {
+    return selectedMeal.value.id
+  }
+  return null
+})
 
 onMounted(() => {
   window.addEventListener('resize', () => {
     windowWidth.value = window.innerWidth
   })
   loadWeekData()
+
+  // Scroll to today after data is loaded and DOM is updated
+  setTimeout(() => {
+    scrollToToday()
+  }, 100)
 })
+
+function scrollToToday() {
+  const todayElement = document.querySelector('.bg-primary.text-white')
+  if (todayElement) {
+    const navHeight = 64 + 80 // App bar + sticky nav height
+    const elementTop = todayElement.getBoundingClientRect().top + window.scrollY
+    window.scrollTo({
+      top: elementTop - navHeight,
+      behavior: 'smooth'
+    })
+  }
+}
 
 // Meal slots
 const mealSlots = [
@@ -243,8 +273,13 @@ function openDishSelector(date, slotId, slotName) {
 async function editMeal(meal) {
   selectedMeal.value = { ...meal, isNew: false }
 
-  // If meal is committed, show bottom sheet with options
-  if (meal.committed) {
+  // Check if this is an "eating out" meal (no dishId but has dishName)
+  const isEatingOut = !meal.dishId && meal.dishName
+
+  if (isEatingOut) {
+    // Show special sheet for eating out meals
+    showEatingOutMealSheet.value = true
+  } else if (meal.committed) {
     // Check if dish has a recipe URL
     selectedDishHasRecipe.value = false
     if (meal.dishId) {
@@ -257,14 +292,50 @@ async function editMeal(meal) {
     }
     showCommittedMealSheet.value = true
   } else {
-    // Otherwise show dish selector to edit
-    showDishSelector.value = true
+    // For uncommitted meals, check if dish has a recipe URL
+    selectedDishHasRecipe.value = false
+    if (meal.dishId) {
+      try {
+        const dish = await dishesStore.fetchDish(meal.dishId)
+        selectedDishHasRecipe.value = !!(dish?.recipeUrl)
+      } catch (error) {
+        // Ignore error, just leave as false
+      }
+    }
+    showUncommittedMealSheet.value = true
   }
+}
+
+function editUncommittedMeal() {
+  showUncommittedMealSheet.value = false
+  showDishSelector.value = true
 }
 
 function editCommittedMeal() {
   showCommittedMealSheet.value = false
   showDishSelector.value = true
+}
+
+function openMoveMealDialog() {
+  showCommittedMealSheet.value = false
+  showUncommittedMealSheet.value = false
+  moveToDate.value = selectedMeal.value.date
+  moveToSlot.value = selectedMeal.value.slotId
+  showMoveMealDialog.value = true
+}
+
+async function confirmMoveMeal() {
+  try {
+    await mealsStore.updateMeal(selectedMeal.value.id, {
+      date: moveToDate.value,
+      slotId: moveToSlot.value,
+      slotName: mealSlots.find(s => s.id === moveToSlot.value)?.name
+    })
+    showMoveMealDialog.value = false
+    appStore.showSnackbar('Mahlzeit verschoben')
+  } catch (error) {
+    appStore.showSnackbar('Fehler beim Verschieben', 'error')
+  }
 }
 
 async function showRecipe() {
@@ -295,12 +366,14 @@ async function onDishSelected({ dish, servings }) {
         slotId: selectedMeal.value.slotId,
         slotName: selectedMeal.value.slotName,
         dishId: dish?.id || null,
+        dishName: dish?.type === 'eating_out' ? dish.name : undefined,
         servings: servings || 2
       })
       appStore.showSnackbar('Mahlzeit hinzugefügt')
     } else {
       await mealsStore.updateMeal(selectedMeal.value.id, {
         dishId: dish?.id || null,
+        dishName: dish?.type === 'eating_out' ? dish.name : undefined,
         servings: servings || selectedMeal.value.servings
       })
       appStore.showSnackbar('Mahlzeit aktualisiert')
@@ -309,6 +382,36 @@ async function onDishSelected({ dish, servings }) {
     appStore.showSnackbar('Fehler beim Speichern', 'error')
   }
   showDishSelector.value = false
+}
+
+function cancelEdit() {
+  showUncommittedMealSheet.value = false
+  selectedMeal.value = null
+}
+
+function openEditEatingOutDialog() {
+  editingEatingOutDescription.value = selectedMeal.value.dishName
+  showEatingOutMealSheet.value = false
+  showEditEatingOutDialog.value = true
+}
+
+async function saveEatingOutDescription() {
+  try {
+    await mealsStore.updateMeal(selectedMeal.value.id, {
+      dishName: editingEatingOutDescription.value
+    })
+    showEditEatingOutDialog.value = false
+    editingEatingOutDescription.value = ''
+    appStore.showSnackbar('Beschreibung aktualisiert')
+  } catch (error) {
+    appStore.showSnackbar('Fehler beim Speichern', 'error')
+  }
+}
+
+function deleteEatingOutMeal() {
+  showEatingOutMealSheet.value = false
+  mealToDelete.value = selectedMeal.value
+  confirmDelete()
 }
 
 function deleteMeal(meal) {
@@ -474,8 +577,8 @@ onMounted(() => {
               </div>
               <div class="flex-grow-1">
                 <MealSlot :meals="getMealsForDaySlot(day.date, slot.id)" :date="day.date" :slot-id="slot.id"
-                  :slot-name="slot.name" @add="openDishSelector(day.date, slot.id, slot.name)" @edit="editMeal"
-                  @delete="deleteMeal" />
+                  :slot-name="slot.name" :editing-meal-id="editingMealId" @add="openDishSelector(day.date, slot.id, slot.name)" @edit="editMeal"
+                  @delete="deleteMeal" @cancel-edit="cancelEdit" />
               </div>
             </div>
           </v-card-text>
@@ -517,8 +620,8 @@ onMounted(() => {
               <div v-for="day in week.days" :key="`${day.date}-${slot.id}`" class="meal-cell"
                 :class="{ 'past': day.isPast }">
                 <MealSlot :meals="getMealsForDaySlot(day.date, slot.id)" :date="day.date" :slot-id="slot.id"
-                  :slot-name="slot.name" @add="openDishSelector(day.date, slot.id, slot.name)" @edit="editMeal"
-                  @delete="deleteMeal" />
+                  :slot-name="slot.name" :editing-meal-id="editingMealId" @add="openDishSelector(day.date, slot.id, slot.name)" @edit="editMeal"
+                  @delete="deleteMeal" @cancel-edit="cancelEdit" />
               </div>
               <!-- Fill remaining cells if week is incomplete -->
               <div v-for="n in (7 - week.days.length)" :key="'empty-cell-' + slot.id + '-' + n"
@@ -545,7 +648,15 @@ onMounted(() => {
     </v-card>
 
     <!-- Dish Selector Dialog -->
-    <DishSelector v-model="showDishSelector" :dishes="dishesStore.dishes" @select="onDishSelected" />
+    <DishSelector
+      v-model="showDishSelector"
+      :dishes="dishesStore.dishes"
+      :initial-dish="selectedMeal?.dishId ? dishesStore.dishes.find(d => d.id === selectedMeal.dishId) : null"
+      :initial-servings="selectedMeal?.servings"
+      :show-cancel="!selectedMeal?.isNew"
+      @select="onDishSelected"
+      @cancel="cancelEdit"
+    />
 
     <!-- Create Shopping List Dialog -->
     <v-dialog v-model="showCreateListDialog" max-width="500">
@@ -618,6 +729,99 @@ onMounted(() => {
       </v-card>
     </v-dialog>
 
+    <!-- Eating out meal bottom sheet -->
+    <v-bottom-sheet v-model="showEatingOutMealSheet" max-width="500">
+      <v-card>
+        <v-card-title class="d-flex align-center pa-4">
+          <v-icon icon="mdi-food-takeout-box" class="mr-2" />
+          {{ selectedMeal?.dishName || 'Auswärts essen' }}
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="showEatingOutMealSheet = false" />
+        </v-card-title>
+
+        <v-card-text class="pa-2">
+          <v-list density="compact">
+            <v-list-item @click="openEditEatingOutDialog" prepend-icon="mdi-pencil">
+              <v-list-item-title>Beschreibung ändern</v-list-item-title>
+            </v-list-item>
+
+            <v-divider class="my-2" />
+
+            <v-list-item @click="deleteEatingOutMeal" prepend-icon="mdi-delete" class="text-error">
+              <v-list-item-title>Mahlzeit löschen</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+      </v-card>
+    </v-bottom-sheet>
+
+    <!-- Edit eating out description dialog -->
+    <v-dialog v-model="showEditEatingOutDialog" max-width="400">
+      <v-card>
+        <v-card-title>Beschreibung ändern</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="editingEatingOutDescription"
+            label="Beschreibung"
+            autofocus
+            @keyup.enter="saveEatingOutDescription"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showEditEatingOutDialog = false">Abbrechen</v-btn>
+          <v-btn color="primary" @click="saveEatingOutDescription">Speichern</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Uncommitted meal bottom sheet -->
+    <v-bottom-sheet v-model="showUncommittedMealSheet" max-width="500">
+      <v-card>
+        <v-card-title class="d-flex align-center pa-4">
+          <div class="flex-grow-1">
+            <div class="d-flex align-center">
+              <v-icon :icon="selectedMeal?.dishId ? 'mdi-food' : 'mdi-silverware-fork-knife'" class="mr-2" />
+              {{ selectedMeal?.dishName || 'Leer' }}
+            </div>
+            <div v-if="selectedMeal?.servings" class="text-caption text-medium-emphasis ml-8">
+              {{ selectedMeal.servings }} Portionen
+            </div>
+          </div>
+          <v-btn icon="mdi-close" variant="text" size="small" @click="showUncommittedMealSheet = false" />
+        </v-card-title>
+
+        <v-card-text class="pa-2">
+          <v-list density="compact">
+            <v-list-item @click="openMoveMealDialog" prepend-icon="mdi-arrow-all">
+              <v-list-item-title>Mahlzeit verschieben</v-list-item-title>
+              <v-list-item-subtitle>Datum oder Slot ändern</v-list-item-subtitle>
+            </v-list-item>
+
+            <v-list-item @click="editUncommittedMeal" prepend-icon="mdi-pencil">
+              <v-list-item-title>Mahlzeit bearbeiten</v-list-item-title>
+              <v-list-item-subtitle>Gericht oder Portionen ändern</v-list-item-subtitle>
+            </v-list-item>
+
+            <v-list-item v-if="selectedMeal?.dishId" @click="showRecipe" prepend-icon="mdi-book-open-variant"
+              :disabled="!selectedDishHasRecipe">
+              <v-list-item-title>Rezept anzeigen</v-list-item-title>
+              <v-list-item-subtitle>
+                {{ selectedDishHasRecipe ? 'Zutaten und Zubereitung' : 'Kein Rezept-Link hinterlegt' }}
+              </v-list-item-subtitle>
+            </v-list-item>
+
+            <v-divider class="my-2" />
+
+            <v-list-item @click="deleteMeal(selectedMeal); showUncommittedMealSheet = false" prepend-icon="mdi-delete"
+              class="text-error">
+              <v-list-item-title>Mahlzeit löschen</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+      </v-card>
+    </v-bottom-sheet>
+
     <!-- Committed meal bottom sheet -->
     <v-bottom-sheet v-model="showCommittedMealSheet" max-width="500">
       <v-card>
@@ -630,9 +834,9 @@ onMounted(() => {
 
         <v-card-text class="pa-2">
           <v-list density="compact">
-            <v-list-item @click="editCommittedMeal" prepend-icon="mdi-pencil">
-              <v-list-item-title>Mahlzeit bearbeiten</v-list-item-title>
-              <v-list-item-subtitle>Gericht oder Portionen ändern</v-list-item-subtitle>
+            <v-list-item @click="openMoveMealDialog" prepend-icon="mdi-arrow-all">
+              <v-list-item-title>Mahlzeit verschieben</v-list-item-title>
+              <v-list-item-subtitle>Datum oder Slot ändern</v-list-item-subtitle>
             </v-list-item>
 
             <v-list-item v-if="selectedMeal?.dishId" @click="showRecipe" prepend-icon="mdi-book-open-variant"
@@ -655,6 +859,33 @@ onMounted(() => {
       </v-card>
     </v-bottom-sheet>
 
+    <!-- Move meal dialog -->
+    <v-dialog v-model="showMoveMealDialog" max-width="400">
+      <v-card>
+        <v-card-title>Mahlzeit verschieben</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="moveToDate"
+            label="Datum"
+            type="date"
+            class="mb-3"
+          />
+          <v-select
+            v-model="moveToSlot"
+            :items="mealSlots"
+            item-title="name"
+            item-value="id"
+            label="Slot"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showMoveMealDialog = false">Abbrechen</v-btn>
+          <v-btn color="primary" @click="confirmMoveMeal">Verschieben</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- FAB for creating shopping list -->
     <v-btn
       v-if="uncommittedCount > 0"
@@ -671,6 +902,8 @@ onMounted(() => {
         :content="uncommittedCount"
         color="error"
         overlap
+        offset-x="-12"
+        offset-y="-12"
       >
         <v-icon>mdi-cart-plus</v-icon>
       </v-badge>
@@ -682,7 +915,7 @@ onMounted(() => {
 /* Sticky navigation */
 .sticky-nav {
   position: sticky;
-  top: 64px;
+  top: calc(64px + env(safe-area-inset-top));
   z-index: 10;
 }
 

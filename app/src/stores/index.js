@@ -128,6 +128,9 @@ export const useVendorsStore = defineStore('vendors', () => {
   }
 })
 
+// Alias for easier access
+export const useCategoriesStore = useVendorsStore
+
 export const useProductsStore = defineStore('products', () => {
   const products = ref([])
   const loading = ref(false)
@@ -161,10 +164,15 @@ export const useProductsStore = defineStore('products', () => {
     products.value = products.value.filter(p => p.id !== id)
   }
 
+  async function loadProducts(search = null) {
+    return fetchProducts(search)
+  }
+
   return {
     products,
     loading,
     fetchProducts,
+    loadProducts,
     createProduct,
     updateProduct,
     deleteProduct

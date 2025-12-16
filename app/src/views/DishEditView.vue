@@ -17,7 +17,20 @@ const saving = ref(false)
 const name = ref('')
 const recipeUrl = ref('')
 const defaultServings = ref(2)
+const categories = ref([])
 const ingredients = ref([])
+
+const availableCategories = [
+  'Dels',
+  'Reis',
+  'Leisch',
+  'Getarisch',
+  'Toffels',
+  'Rühtück',
+  'Suppe',
+  'Lat',
+  'Holschompf'
+]
 
 // New ingredient form
 const showIngredientDialog = ref(false)
@@ -38,6 +51,7 @@ const hasChanges = computed(() => {
     name.value !== dish.value.name ||
     recipeUrl.value !== (dish.value.recipeUrl || '') ||
     defaultServings.value !== dish.value.defaultServings ||
+    JSON.stringify(categories.value) !== JSON.stringify(dish.value.categories || []) ||
     JSON.stringify(ingredients.value) !== JSON.stringify(dish.value.ingredients)
   )
 })
@@ -53,17 +67,19 @@ async function loadDish() {
         name: '',
         recipeUrl: '',
         defaultServings: 2,
+        categories: [],
         ingredients: [],
         type: 'dish'
       }
     } else {
       dish.value = await dishesStore.fetchDish(route.params.id)
     }
-    
+
     // Populate form
     name.value = dish.value.name
     recipeUrl.value = dish.value.recipeUrl || ''
     defaultServings.value = dish.value.defaultServings
+    categories.value = [...(dish.value.categories || [])]
     ingredients.value = [...(dish.value.ingredients || [])]
   } catch (error) {
     appStore.showSnackbar('Fehler beim Laden', 'error')
@@ -86,6 +102,7 @@ async function saveDish() {
       name: name.value.trim(),
       recipeUrl: recipeUrl.value || null,
       defaultServings: defaultServings.value,
+      categories: categories.value,
       ingredients: ingredients.value
     }
     
@@ -127,12 +144,22 @@ function saveIngredient() {
     appStore.showSnackbar('Name ist erforderlich', 'error')
     return
   }
-  
+
+  // Handle undefined amounts: both amount and unit can be null
+  let amount = parseFloat(ingredientForm.value.amount)
+  let unit = ingredientForm.value.unit
+
+  // If amount is empty/null/0 and unit is empty, treat as undefined amount
+  if ((!amount || amount === 0) && !unit) {
+    amount = null
+    unit = null
+  }
+
   const ingredient = {
     id: editingIngredient.value?.id || crypto.randomUUID(),
     productName: ingredientForm.value.productName.trim(),
-    amount: parseFloat(ingredientForm.value.amount) || 0,
-    unit: ingredientForm.value.unit,
+    amount: amount,
+    unit: unit,
     optional: ingredientForm.value.optional,
     productId: null // Would be set when linking to product DB
   }
@@ -219,8 +246,21 @@ watch(() => route.params.id, loadDish)
               v-model.number="defaultServings"
               label="Standard-Portionen"
               type="number"
+              inputmode="numeric"
               min="1"
               max="20"
+            />
+          </v-col>
+          <v-col cols="12">
+            <v-select
+              v-model="categories"
+              :items="availableCategories"
+              label="Kategorien"
+              multiple
+              chips
+              closable-chips
+              hint="Wähle eine oder mehrere Kategorien für dieses Gericht"
+              persistent-hint
             />
           </v-col>
         </v-row>
@@ -248,8 +288,13 @@ watch(() => route.params.id, loadDish)
             v-for="ing in ingredients"
             :key="ing.id"
             :title="ing.productName"
-            :subtitle="`${ing.amount} ${ing.unit}${ing.optional ? ' (optional)' : ''}`"
           >
+            <template #subtitle>
+              <span v-if="ing.amount !== null && ing.unit !== null">
+                {{ ing.amount }} {{ ing.unit }}{{ ing.optional ? ' (optional)' : '' }}
+              </span>
+              <span v-else-if="ing.optional">(optional)</span>
+            </template>
             <template #prepend>
               <v-icon icon="mdi-circle-small" />
             </template>
@@ -310,6 +355,7 @@ watch(() => route.params.id, loadDish)
                 v-model.number="ingredientForm.amount"
                 label="Menge"
                 type="number"
+                inputmode="decimal"
                 min="0"
                 step="0.1"
               />

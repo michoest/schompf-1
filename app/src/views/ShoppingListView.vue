@@ -24,6 +24,10 @@ const showDeleteConfirmDialog = ref(false)
 const itemToDelete = ref(null)
 const showActionsMenu = ref(false)
 
+const showChangeCategoryDialog = ref(false)
+const itemToChangeCategory = ref(null)
+const newCategoryId = ref(null)
+
 const showCompleted = ref(false)
 const showFutureItems = ref(true)
 
@@ -104,13 +108,24 @@ const itemsByVendor = computed(() => {
       grouped[vendor] = {
         name: vendor,
         color: item.vendorColor || '#9CA3AF',
-        items: []
+        categories: {}
       }
     }
-    grouped[vendor].items.push(item)
+
+    const category = item.categoryName || 'Sonstiges'
+    if (!grouped[vendor].categories[category]) {
+      grouped[vendor].categories[category] = []
+    }
+    grouped[vendor].categories[category].push(item)
   }
 
-  return Object.values(grouped)
+  // Convert categories object to sorted array
+  return Object.values(grouped).map(vendor => ({
+    ...vendor,
+    categories: Object.entries(vendor.categories)
+      .map(([name, items]) => ({ name, items }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }))
 })
 
 const checkedCount = computed(() => {
@@ -177,10 +192,11 @@ async function addManualItem() {
       shoppingStore.shoppingList.items.push(item)
     }
 
+    const productName = newItem.value.name.trim()
     showAddItemDialog.value = false
     newItem.value = { name: '', amount: 1, unit: 'Stück', categoryId: null }
     userSelectedCategory.value = false
-    appStore.showSnackbar('Artikel hinzugefügt')
+    appStore.showSnackbar(`${productName} hinzugefügt`)
   } catch (error) {
     appStore.showSnackbar('Fehler beim Hinzufügen', 'error')
   }
@@ -257,8 +273,9 @@ async function saveEditedItem() {
   }
 
   try {
+    const productName = editItem.value.name.trim()
     await api.updateShoppingItem(editItem.value.id, {
-      productName: editItem.value.name.trim(),
+      productName: productName,
       amount: parseFloat(editItem.value.amount) || 1,
       unit: editItem.value.unit,
       categoryId: editItem.value.categoryId
@@ -268,7 +285,7 @@ async function saveEditedItem() {
     await shoppingStore.loadCurrentList()
 
     showEditItemDialog.value = false
-    appStore.showSnackbar('Artikel aktualisiert')
+    appStore.showSnackbar(`${productName} aktualisiert`)
   } catch (error) {
     appStore.showSnackbar('Fehler beim Aktualisieren', 'error')
   }
@@ -279,10 +296,38 @@ function confirmDeleteItem(item) {
   showDeleteConfirmDialog.value = true
 }
 
+function openChangeCategoryDialog(item) {
+  itemToChangeCategory.value = item
+  newCategoryId.value = item.categoryId
+  showChangeCategoryDialog.value = true
+}
+
+async function changeItemCategory() {
+  if (!itemToChangeCategory.value) return
+
+  try {
+    const productName = itemToChangeCategory.value.productName
+    await api.updateShoppingItem(itemToChangeCategory.value.id, {
+      categoryId: newCategoryId.value
+    })
+
+    // Reload the list to get updated item with new category/vendor info
+    await shoppingStore.loadCurrentList()
+
+    showChangeCategoryDialog.value = false
+    itemToChangeCategory.value = null
+    newCategoryId.value = null
+    appStore.showSnackbar(`${productName} verschoben`)
+  } catch (error) {
+    appStore.showSnackbar('Fehler beim Verschieben', 'error')
+  }
+}
+
 async function deleteItem() {
   if (!itemToDelete.value) return
 
   try {
+    const productName = itemToDelete.value.productName
     await api.deleteShoppingItem(itemToDelete.value.id)
 
     // Remove from local state
@@ -295,7 +340,7 @@ async function deleteItem() {
 
     showDeleteConfirmDialog.value = false
     itemToDelete.value = null
-    appStore.showSnackbar('Artikel gelöscht')
+    appStore.showSnackbar(`${productName} gelöscht`)
   } catch (error) {
     appStore.showSnackbar('Fehler beim Löschen', 'error')
   }
@@ -415,58 +460,67 @@ async function clearAllItems() {
           </v-chip>
         </div>
 
-        <!-- Items -->
+        <!-- Items grouped by category -->
         <v-card variant="flat" color="surface">
           <v-list density="compact">
-            <v-list-item v-for="item in vendor.items" :key="item.id" :class="{ 'item-checked': item.checked }"
-              @click="toggleItem(item)">
-              <template #prepend>
-                <v-checkbox-btn :model-value="item.checked" color="primary" @click.stop="toggleItem(item)" />
-              </template>
+            <template v-for="(category, categoryIdx) in vendor.categories" :key="category.name">
+              <!-- Category separator -->
+              <v-list-subheader v-if="categoryIdx > 0 || vendor.categories.length > 1" class="category-separator">
+                {{ category.name }}
+              </v-list-subheader>
 
-              <v-list-item-title :class="{ 'text-decoration-line-through': item.checked }">
-                {{ item.productName }}
-              </v-list-item-title>
+              <!-- Items in this category -->
+              <v-list-item v-for="item in category.items" :key="item.id" :class="{ 'item-checked': item.checked }"
+                @click="toggleItem(item)">
+                <template #prepend>
+                  <v-checkbox-btn :model-value="item.checked" color="primary" @click.stop="toggleItem(item)" />
+                </template>
 
-              <v-list-item-subtitle>
-                {{ item.displayAmount }}
-                <span v-if="item.categoryName" class="text-medium-emphasis">
-                  · {{ item.categoryName }}
-                </span>
-              </v-list-item-subtitle>
+                <v-list-item-title :class="{ 'text-decoration-line-through': item.checked }">
+                  {{ item.productName }}
+                </v-list-item-title>
 
-              <template #append>
-                <div class="d-flex align-center gap-1">
-                  <!-- Freshness indicator - only show when item should not be bought yet -->
-                  <v-tooltip v-if="item.freshnessStatus === 'wait'" location="top">
-                    <template #activator="{ props }">
-                      <v-icon v-bind="props" :icon="getFreshnessIcon(item.freshnessStatus)"
-                        :color="getFreshnessColor(item.freshnessStatus)" size="small" />
-                    </template>
-                    <div>
+                <v-list-item-subtitle>
+                  {{ item.displayAmount }}
+                </v-list-item-subtitle>
+
+                <template #append>
+                  <div class="d-flex align-center gap-1">
+                    <!-- Freshness indicator - only show when item should not be bought yet -->
+                    <v-tooltip v-if="item.freshnessStatus === 'wait'" location="top">
+                      <template #activator="{ props }">
+                        <v-icon v-bind="props" :icon="getFreshnessIcon(item.freshnessStatus)"
+                          :color="getFreshnessColor(item.freshnessStatus)" size="small" />
+                      </template>
                       <div>
-                        Frühestens kaufen ab: {{ formatDate(item.earliestPurchaseDate) }}
+                        <div>
+                          Frühestens kaufen ab: {{ formatDate(item.earliestPurchaseDate) }}
+                        </div>
+                        <div class="text-caption">
+                          Benötigt am {{ formatDate(item.earliestUseDate) }}
+                        </div>
                       </div>
-                      <div class="text-caption">
-                        Benötigt am {{ formatDate(item.earliestUseDate) }}
-                      </div>
-                    </div>
-                  </v-tooltip>
+                    </v-tooltip>
 
-                  <!-- Source info button -->
-                  <v-btn v-if="item.sources?.length" icon="mdi-information-outline" variant="text" size="x-small"
-                    @click.stop="showSources(item)" />
+                    <!-- Source info button -->
+                    <v-btn v-if="item.sources?.length" icon="mdi-information-outline" variant="text" size="x-small"
+                      @click.stop="showSources(item)" />
 
-                  <!-- Edit button (only for manually added items) -->
-                  <v-btn v-if="item.sources?.some(s => s.manual)" icon="mdi-pencil" variant="text" size="x-small"
-                    @click.stop="openEditDialog(item)" />
+                    <!-- Change category button (only for manually added items) -->
+                    <v-btn v-if="item.sources?.some(s => s.manual)" icon="mdi-folder-move" variant="text" size="x-small"
+                      @click.stop="openChangeCategoryDialog(item)" />
 
-                  <!-- Delete button (only for manually added items) -->
-                  <v-btn v-if="item.sources?.some(s => s.manual)" icon="mdi-delete" variant="text" size="x-small"
-                    color="error" @click.stop="confirmDeleteItem(item)" />
-                </div>
-              </template>
-            </v-list-item>
+                    <!-- Edit button (only for manually added items) -->
+                    <v-btn v-if="item.sources?.some(s => s.manual)" icon="mdi-pencil" variant="text" size="x-small"
+                      @click.stop="openEditDialog(item)" />
+
+                    <!-- Delete button (only for manually added items) -->
+                    <v-btn v-if="item.sources?.some(s => s.manual)" icon="mdi-delete" variant="text" size="x-small"
+                      color="error" @click.stop="confirmDeleteItem(item)" />
+                  </div>
+                </template>
+              </v-list-item>
+            </template>
           </v-list>
         </v-card>
       </div>
@@ -503,7 +557,7 @@ async function clearAllItems() {
           <v-text-field v-model="newItem.name" label="Produkt" autofocus class="mb-3" @keyup.enter="addManualItem" />
           <v-row>
             <v-col cols="6">
-              <v-text-field v-model.number="newItem.amount" label="Menge" type="number" min="0" step="0.1" />
+              <v-text-field v-model.number="newItem.amount" label="Menge" type="number" inputmode="decimal" min="0" step="0.1" />
             </v-col>
             <v-col cols="6">
               <v-combobox v-model="newItem.unit" :items="['Stück', 'g', 'kg', 'ml', 'l', 'Packung', 'Bund']"
@@ -576,7 +630,7 @@ async function clearAllItems() {
           <v-text-field v-model="editItem.name" label="Produkt" autofocus class="mb-3" @keyup.enter="saveEditedItem" />
           <v-row>
             <v-col cols="6">
-              <v-text-field v-model.number="editItem.amount" label="Menge" type="number" min="0" step="0.1" />
+              <v-text-field v-model.number="editItem.amount" label="Menge" type="number" inputmode="decimal" min="0" step="0.1" />
             </v-col>
             <v-col cols="6">
               <v-combobox v-model="editItem.unit" :items="['Stück', 'g', 'kg', 'ml', 'l', 'Packung', 'Bund']"
@@ -625,6 +679,41 @@ async function clearAllItems() {
       </v-card>
     </v-dialog>
 
+    <!-- Change category dialog -->
+    <v-dialog v-model="showChangeCategoryDialog" max-width="400">
+      <v-card>
+        <v-card-title>Kategorie ändern</v-card-title>
+        <v-card-text>
+          <p class="text-medium-emphasis mb-4">
+            Verschiebe "{{ itemToChangeCategory?.productName }}" in eine andere Kategorie
+          </p>
+          <v-select v-model="newCategoryId" :items="categoryOptions" item-title="title" item-value="value"
+            label="Neue Kategorie">
+            <template #item="{ item, props }">
+              <v-list-item v-bind="props">
+                <template #prepend>
+                  <v-avatar :color="item.raw.vendorColor || '#9CA3AF'" size="24" class="mr-2">
+                    <v-icon icon="mdi-store" size="small" color="white" />
+                  </v-avatar>
+                </template>
+                <v-list-item-subtitle>{{ item.raw.subtitle }}</v-list-item-subtitle>
+              </v-list-item>
+            </template>
+            <template #selection="{ item }">
+              <v-chip :color="item.raw.vendorColor || '#9CA3AF'" size="small" label>
+                {{ item.raw.title }} ({{ item.raw.subtitle }})
+              </v-chip>
+            </template>
+          </v-select>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showChangeCategoryDialog = false">Abbrechen</v-btn>
+          <v-btn color="primary" @click="changeItemCategory">Verschieben</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Clear list confirmation dialog -->
     <v-dialog v-model="showClearConfirmDialog" max-width="400">
       <v-card>
@@ -650,5 +739,12 @@ async function clearAllItems() {
 
 .item-checked {
   opacity: 0.6;
+}
+
+.category-separator {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgb(var(--v-theme-primary));
+  margin-top: 8px;
 }
 </style>

@@ -125,6 +125,7 @@ function resetToDefaults() {
               v-model.number="defaultServings"
               label="Standard-Portionen"
               type="number"
+              inputmode="numeric"
               min="1"
               max="20"
               hint="Wird für neue Gerichte verwendet"
@@ -136,6 +137,7 @@ function resetToDefaults() {
               v-model.number="defaultFreshnessDays"
               label="Standard-Haltbarkeit (Tage)"
               type="number"
+              inputmode="numeric"
               min="1"
               hint="Wird für neue Produkte verwendet"
               persistent-hint

@@ -39,20 +39,26 @@ onUnmounted(() => {
 <template>
   <v-app>
     <!-- App Bar -->
-    <v-app-bar 
-      color="primary" 
+    <v-app-bar
+      color="primary"
       density="comfortable"
       elevation="0"
+      class="safe-area-top"
     >
-      <v-app-bar-nav-icon 
+      <v-app-bar-nav-icon
         v-if="!isMobile"
         @click="rail = !rail"
       />
-      
-      <v-app-bar-title class="d-flex align-center">
+
+      <v-app-bar-title class="d-flex align-center justify-center">
         <v-icon icon="mdi-chef-hat" class="mr-2" />
         <span class="font-weight-bold">Schompf</span>
       </v-app-bar-title>
+
+      <!-- Spacer for centering on desktop -->
+      <template v-if="!isMobile" #append>
+        <div style="width: 48px;"></div>
+      </template>
     </v-app-bar>
 
     <!-- Navigation Drawer (Desktop only) -->
@@ -110,6 +116,7 @@ onUnmounted(() => {
       grow
       color="primary"
       elevation="8"
+      class="safe-area-bottom"
     >
       <v-btn 
         v-for="item in navItems.slice(0, 5)" 
@@ -142,6 +149,15 @@ onUnmounted(() => {
 </template>
 
 <style>
+/* Safe area support for PWA */
+.safe-area-top {
+  margin-top: env(safe-area-inset-top);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.15s ease;
@@ -153,10 +169,10 @@ onUnmounted(() => {
 }
 
 .pb-20 {
-  padding-bottom: 80px !important;
+  padding-bottom: calc(100px + env(safe-area-inset-bottom)) !important;
 }
 
 .mb-16 {
-  margin-bottom: 64px !important;
+  margin-bottom: calc(64px + env(safe-area-inset-bottom)) !important;
 }
 </style>

@@ -341,7 +341,7 @@ onMounted(() => {
             </v-col>
             <v-col cols="6">
               <v-text-field v-model.number="productForm.freshnessDays" label="Haltbarkeit (Tage)" type="number"
-                min="1" />
+                inputmode="numeric" min="1" />
             </v-col>
           </v-row>
         </v-card-text>

@@ -62,11 +62,11 @@ router.get('/date/:date', async (req, res) => {
 // Create meal
 router.post('/', async (req, res) => {
   try {
-    const { date, slotId, slotName, slotOrder, dishId, servings, notes } = req.body;
+    const { date, slotId, slotName, slotOrder, dishId, dishName, servings, notes } = req.body;
     if (!date) {
       return res.status(400).json({ error: 'Datum ist erforderlich' });
     }
-    
+
     // Verify dish exists if provided
     let dish = null;
     if (dishId) {
@@ -75,10 +75,10 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'Gericht nicht gefunden' });
       }
     }
-    
+
     // Determine slot info
     const slot = db.data.settings.mealSlots.find(s => s.id === slotId);
-    
+
     const meal = {
       id: uuidv4(),
       date, // Format: YYYY-MM-DD
@@ -86,7 +86,7 @@ router.post('/', async (req, res) => {
       slotName: slotName || slot?.name || 'Mahlzeit',
       slotOrder: slotOrder ?? slot?.order ?? 99,
       dishId: dishId || null,
-      dishName: dish?.name || null,
+      dishName: dishName || dish?.name || null,
       servings: servings || dish?.defaultServings || db.data.settings.defaultServings,
       notes: notes || null,
       committed: false, // New field: whether ingredients are on shopping list
@@ -111,8 +111,8 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Mahlzeit nicht gefunden' });
     }
 
-    const { date, slotId, slotName, slotOrder, dishId, servings, notes, committed } = req.body;
-    
+    const { date, slotId, slotName, slotOrder, dishId, dishName, servings, notes, committed } = req.body;
+
     // Verify dish exists if changing
     let dish = null;
     if (dishId !== undefined) {
@@ -125,7 +125,7 @@ router.put('/:id', async (req, res) => {
     } else if (db.data.meals[index].dishId) {
       dish = db.data.dishes.find(d => d.id === db.data.meals[index].dishId);
     }
-    
+
     db.data.meals[index] = {
       ...db.data.meals[index],
       date: date ?? db.data.meals[index].date,
@@ -133,7 +133,7 @@ router.put('/:id', async (req, res) => {
       slotName: slotName ?? db.data.meals[index].slotName,
       slotOrder: slotOrder ?? db.data.meals[index].slotOrder,
       dishId: dishId !== undefined ? dishId : db.data.meals[index].dishId,
-      dishName: dishId !== undefined ? (dish?.name || null) : db.data.meals[index].dishName,
+      dishName: dishName !== undefined ? dishName : (dishId !== undefined ? (dish?.name || null) : db.data.meals[index].dishName),
       servings: servings ?? db.data.meals[index].servings,
       notes: notes !== undefined ? notes : db.data.meals[index].notes,
       committed: committed !== undefined ? committed : (db.data.meals[index].committed || false),

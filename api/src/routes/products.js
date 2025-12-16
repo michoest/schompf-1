@@ -9,7 +9,7 @@ router.get('/', async (req, res) => {
   try {
     await db.read();
     let products = db.data.products;
-    
+
     // Optional filtering
     if (req.query.categoryId) {
       products = products.filter(p => p.categoryId === req.query.categoryId);
@@ -18,8 +18,21 @@ router.get('/', async (req, res) => {
       const search = req.query.search.toLowerCase();
       products = products.filter(p => p.name.toLowerCase().includes(search));
     }
-    
-    res.json(products);
+
+    // Enrich products with category and vendor names
+    const enrichedProducts = products.map(product => {
+      const category = db.data.categories.find(c => c.id === product.categoryId);
+      const vendor = category ? db.data.vendors.find(v => v.id === category.vendorId) : null;
+
+      return {
+        ...product,
+        categoryName: category?.name || null,
+        vendorName: vendor?.name || null,
+        vendorColor: vendor?.color || null
+      };
+    });
+
+    res.json(enrichedProducts);
   } catch (error) {
     res.status(500).json({ error: 'Fehler beim Laden der Produkte' });
   }
@@ -33,7 +46,19 @@ router.get('/:id', async (req, res) => {
     if (!product) {
       return res.status(404).json({ error: 'Produkt nicht gefunden' });
     }
-    res.json(product);
+
+    // Enrich product with category and vendor names
+    const category = db.data.categories.find(c => c.id === product.categoryId);
+    const vendor = category ? db.data.vendors.find(v => v.id === category.vendorId) : null;
+
+    const enrichedProduct = {
+      ...product,
+      categoryName: category?.name || null,
+      vendorName: vendor?.name || null,
+      vendorColor: vendor?.color || null
+    };
+
+    res.json(enrichedProduct);
   } catch (error) {
     res.status(500).json({ error: 'Fehler beim Laden des Produkts' });
   }

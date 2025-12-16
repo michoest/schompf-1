@@ -42,11 +42,11 @@ router.get('/:id', async (req, res) => {
 // Create dish
 router.post('/', async (req, res) => {
   try {
-    const { name, recipeUrl, ingredients, defaultServings, type, subDishes } = req.body;
+    const { name, recipeUrl, ingredients, defaultServings, type, subDishes, categories } = req.body;
     if (!name) {
       return res.status(400).json({ error: 'Name ist erforderlich' });
     }
-    
+
     // Validate ingredients if provided
     const validatedIngredients = (ingredients || []).map(ing => ({
       id: uuidv4(),
@@ -56,13 +56,13 @@ router.post('/', async (req, res) => {
       unit: ing.unit || '',
       optional: ing.optional || false
     }));
-    
+
     // Validate sub-dishes if provided
     const validatedSubDishes = (subDishes || []).map(sub => ({
       dishId: sub.dishId,
       multiplier: sub.multiplier || 1
     }));
-    
+
     const dish = {
       id: uuidv4(),
       name,
@@ -71,6 +71,7 @@ router.post('/', async (req, res) => {
       defaultServings: defaultServings || db.data.settings.defaultServings,
       type: type || 'dish', // 'dish', 'eating_out', 'placeholder'
       subDishes: validatedSubDishes,
+      categories: categories || [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -92,8 +93,8 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Gericht nicht gefunden' });
     }
     
-    const { name, recipeUrl, ingredients, defaultServings, type, subDishes } = req.body;
-    
+    const { name, recipeUrl, ingredients, defaultServings, type, subDishes, categories } = req.body;
+
     // Validate ingredients if provided
     let validatedIngredients = db.data.dishes[index].ingredients;
     if (ingredients !== undefined) {
@@ -106,7 +107,7 @@ router.put('/:id', async (req, res) => {
         optional: ing.optional || false
       }));
     }
-    
+
     // Validate sub-dishes if provided
     let validatedSubDishes = db.data.dishes[index].subDishes || [];
     if (subDishes !== undefined) {
@@ -115,7 +116,7 @@ router.put('/:id', async (req, res) => {
         multiplier: sub.multiplier || 1
       }));
     }
-    
+
     db.data.dishes[index] = {
       ...db.data.dishes[index],
       name: name ?? db.data.dishes[index].name,
@@ -124,6 +125,7 @@ router.put('/:id', async (req, res) => {
       defaultServings: defaultServings ?? db.data.dishes[index].defaultServings,
       type: type ?? db.data.dishes[index].type,
       subDishes: validatedSubDishes,
+      categories: categories !== undefined ? categories : (db.data.dishes[index].categories || []),
       updatedAt: new Date().toISOString()
     };
     

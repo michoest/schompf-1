@@ -78,16 +78,15 @@ function collectIngredients(dishId, servingsMultiplier, db, visited = new Set())
   
   const ingredients = [];
   
-  // Add direct ingredients
+  // Add direct ingredients (including optional ones)
   for (const ing of dish.ingredients) {
-    if (!ing.optional) {
-      ingredients.push({
-        productId: ing.productId,
-        productName: ing.productName,
-        amount: ing.amount * servingsMultiplier,
-        unit: ing.unit
-      });
-    }
+    ingredients.push({
+      productId: ing.productId,
+      productName: ing.productName,
+      amount: ing.amount * servingsMultiplier,
+      unit: ing.unit,
+      optional: ing.optional || false
+    });
   }
   
   // Add ingredients from sub-dishes
@@ -154,20 +153,25 @@ router.post('/generate', async (req, res) => {
         if (!ingredientMap.has(key)) {
           // Find product for category info
           const product = ing.productId ? db.data.products.find(p => p.id === ing.productId) : null;
-          
+
           ingredientMap.set(key, {
             productId: ing.productId,
             productName: ing.productName || product?.name || 'Unbekannt',
             totalAmount: 0,
+            optionalAmount: 0,
             unit: normalized.unit,
             categoryId: product?.categoryId || null,
             freshnessDays: product?.freshnessDays || db.data.settings.defaultFreshnessDays,
             sources: [] // Track which meals this is for
           });
         }
-        
+
         const entry = ingredientMap.get(key);
-        entry.totalAmount += normalized.amount;
+        if (ing.optional) {
+          entry.optionalAmount += normalized.amount;
+        } else {
+          entry.totalAmount += normalized.amount;
+        }
         entry.sources.push({
           mealId: meal.id,
           mealDate: meal.date,
@@ -175,7 +179,8 @@ router.post('/generate', async (req, res) => {
           dishId: meal.dishId,
           dishName: meal.dishName,
           amount: ing.amount,
-          unit: ing.unit
+          unit: ing.unit,
+          optional: ing.optional || false
         });
       }
     }
@@ -200,6 +205,13 @@ router.post('/generate', async (req, res) => {
       } else {
         // New item - add it
         const formatted = formatAmount(data.totalAmount, data.unit);
+        const formattedOptional = data.optionalAmount > 0 ? formatAmount(data.optionalAmount, data.unit) : null;
+
+        // Build display amount with optional portion
+        let displayAmount = formatted.display;
+        if (formattedOptional) {
+          displayAmount = `${formatted.display} (optional + ${formattedOptional.display})`;
+        }
 
         // Find category and vendor
         let category = null;
@@ -244,7 +256,8 @@ router.post('/generate', async (req, res) => {
           productName: data.productName,
           amount: formatted.amount,
           unit: formatted.unit,
-          displayAmount: formatted.display,
+          displayAmount: displayAmount,
+          optionalAmount: data.optionalAmount > 0 ? formattedOptional.amount : null,
           categoryId: data.categoryId,
           categoryName: category?.name || null,
           categoryOrder: category?.order ?? 999,

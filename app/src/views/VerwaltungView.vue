@@ -1,6 +1,8 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useProductsStore, useVendorsStore, useDishesStore, useAppStore } from '@/stores'
+import ProductBulkEditor from '@/components/ProductBulkEditor.vue'
+import DishBulkEditor from '@/components/DishBulkEditor.vue'
 
 const productsStore = useProductsStore()
 const vendorsStore = useVendorsStore()
@@ -9,6 +11,16 @@ const appStore = useAppStore()
 
 const search = ref('')
 const activeTab = ref('vendors')
+const windowWidth = ref(window.innerWidth)
+const showBulkEditor = ref(false)
+const showDishBulkEditor = ref(false)
+
+const isMobile = computed(() => windowWidth.value < 960)
+const canShowBulkEditor = computed(() => windowWidth.value >= 640)
+
+function onResize() {
+  windowWidth.value = window.innerWidth
+}
 
 // Vendor form
 const showVendorDialog = ref(false)
@@ -43,8 +55,21 @@ const dishForm = ref({
   name: '',
   recipeUrl: '',
   defaultServings: 2,
+  categories: [],
   ingredients: []
 })
+
+const availableCategories = [
+  'Dels',
+  'Reis',
+  'Leisch',
+  'Getarisch',
+  'Toffels',
+  'Rühtück',
+  'Suppe',
+  'Lat',
+  'Holschompf'
+]
 
 // Ingredient form
 const showIngredientDialog = ref(false)
@@ -61,6 +86,9 @@ const ingredientForm = ref({
 const showJsonImportDialog = ref(false)
 const jsonInput = ref('')
 const jsonError = ref('')
+
+// Ingredient search
+const ingredientSearch = ref('')
 
 const commonUnits = ['g', 'kg', 'ml', 'l', 'Stück', 'EL', 'TL', 'Bund', 'Packung', 'Dose']
 const vendorColors = [
@@ -115,6 +143,87 @@ const categoriesWithVendor = computed(() => {
     // Sort alphabetically by category name
     return a.name.localeCompare(b.name)
   })
+})
+
+// Vendors with their categories, sorted
+const vendorsWithCategories = computed(() => {
+  // Sort vendors alphabetically
+  const sorted = [...vendorsStore.vendors].sort((a, b) => a.name.localeCompare(b.name))
+
+  return sorted.map(vendor => {
+    // Get categories for this vendor, sorted by order
+    const categories = vendorsStore.getCategoriesForVendor(vendor.id)
+      .sort((a, b) => (a.order || 0) - (b.order || 0))
+
+    return {
+      ...vendor,
+      categories
+    }
+  })
+})
+
+// Ingredient search results
+const ingredientSearchResults = computed(() => {
+  if (!ingredientSearch.value || ingredientSearch.value.length < 2) {
+    return []
+  }
+
+  const searchLower = ingredientSearch.value.toLowerCase()
+  const results = []
+
+  for (const dish of dishesStore.dishes) {
+    if (dish.type === 'eating_out') continue
+
+    if (dish.ingredients && Array.isArray(dish.ingredients)) {
+      for (const ing of dish.ingredients) {
+        const productName = ing.productName || ''
+        if (productName.toLowerCase().includes(searchLower)) {
+          results.push({
+            dishId: dish.id,
+            dishName: dish.name,
+            ingredientName: ing.productName,
+            ingredientAmount: ing.amount,
+            ingredientUnit: ing.unit,
+            ingredientOptional: ing.optional || false
+          })
+        }
+      }
+    }
+  }
+
+  return results
+})
+
+const dishesUsingIngredient = computed(() => {
+  const uniqueDishes = new Set()
+  ingredientSearchResults.value.forEach(r => uniqueDishes.add(r.dishId))
+  return Array.from(uniqueDishes)
+})
+
+const groupedIngredients = computed(() => {
+  const groups = new Map()
+
+  for (const result of ingredientSearchResults.value) {
+    const key = result.ingredientName
+    if (!groups.has(key)) {
+      groups.set(key, {
+        ingredientName: key,
+        dishes: []
+      })
+    }
+
+    groups.get(key).dishes.push({
+      id: result.dishId,
+      name: result.dishName,
+      ingredientAmount: result.ingredientAmount,
+      ingredientUnit: result.ingredientUnit,
+      ingredientOptional: result.ingredientOptional
+    })
+  }
+
+  return Array.from(groups.values()).sort((a, b) =>
+    a.ingredientName.localeCompare(b.ingredientName)
+  )
 })
 
 const productsWithCategory = computed(() => {
@@ -257,6 +366,44 @@ async function deleteCategory(category) {
   }
 }
 
+async function moveCategoryUp(category, vendorId) {
+  const categories = vendorsStore.getCategoriesForVendor(vendorId)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+
+  const currentIndex = categories.findIndex(c => c.id === category.id)
+  if (currentIndex <= 0) return // Already at top
+
+  const prevCategory = categories[currentIndex - 1]
+
+  try {
+    // Swap orders
+    await vendorsStore.updateCategory(category.id, { order: prevCategory.order })
+    await vendorsStore.updateCategory(prevCategory.id, { order: category.order })
+    appStore.showSnackbar('Reihenfolge aktualisiert')
+  } catch (error) {
+    appStore.showSnackbar('Fehler beim Verschieben', 'error')
+  }
+}
+
+async function moveCategoryDown(category, vendorId) {
+  const categories = vendorsStore.getCategoriesForVendor(vendorId)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+
+  const currentIndex = categories.findIndex(c => c.id === category.id)
+  if (currentIndex >= categories.length - 1) return // Already at bottom
+
+  const nextCategory = categories[currentIndex + 1]
+
+  try {
+    // Swap orders
+    await vendorsStore.updateCategory(category.id, { order: nextCategory.order })
+    await vendorsStore.updateCategory(nextCategory.id, { order: category.order })
+    appStore.showSnackbar('Reihenfolge aktualisiert')
+  } catch (error) {
+    appStore.showSnackbar('Fehler beim Verschieben', 'error')
+  }
+}
+
 // Product actions
 function openProductDialog(product = null) {
   if (product) {
@@ -313,6 +460,7 @@ function openDishDialog(dish = null) {
       name: dish.name,
       recipeUrl: dish.recipeUrl || '',
       defaultServings: dish.defaultServings,
+      categories: [...(dish.categories || [])],
       ingredients: [...(dish.ingredients || [])]
     }
   } else {
@@ -321,6 +469,7 @@ function openDishDialog(dish = null) {
       name: '',
       recipeUrl: '',
       defaultServings: 2,
+      categories: [],
       ingredients: []
     }
   }
@@ -338,6 +487,7 @@ async function saveDish() {
       name: dishForm.value.name.trim(),
       recipeUrl: dishForm.value.recipeUrl || null,
       defaultServings: dishForm.value.defaultServings,
+      categories: dishForm.value.categories,
       ingredients: dishForm.value.ingredients,
       type: 'dish'
     }
@@ -391,12 +541,22 @@ function saveIngredient() {
     return
   }
 
+  // Handle undefined amounts: both amount and unit can be null
+  let amount = parseFloat(ingredientForm.value.amount)
+  let unit = ingredientForm.value.unit
+
+  // If amount is empty/null/0 and unit is empty, treat as undefined amount
+  if ((!amount || amount === 0) && !unit) {
+    amount = null
+    unit = null
+  }
+
   const ingredient = {
     id: editingIngredient.value?.id || crypto.randomUUID(),
     productId: ingredientForm.value.productId || null,
     productName: ingredientForm.value.productName.trim(),
-    amount: parseFloat(ingredientForm.value.amount) || 0,
-    unit: ingredientForm.value.unit,
+    amount: amount,
+    unit: unit,
     optional: ingredientForm.value.optional
   }
 
@@ -447,8 +607,9 @@ async function importFromJson() {
         jsonError.value = `Fehler in Zutat ${i + 1}: "productName" ist erforderlich`
         return
       }
-      if (typeof ing.amount !== 'number') {
-        jsonError.value = `Fehler in Zutat ${i + 1}: "amount" muss eine Zahl sein`
+      // Allow null for both amount and unit (undefined amount)
+      if (ing.amount !== null && ing.amount !== undefined && typeof ing.amount !== 'number') {
+        jsonError.value = `Fehler in Zutat ${i + 1}: "amount" muss eine Zahl oder null sein`
         return
       }
     }
@@ -458,14 +619,27 @@ async function importFromJson() {
       name: data.name,
       recipeUrl: data.recipeUrl || null,
       defaultServings: data.defaultServings || 2,
-      ingredients: data.ingredients.map(ing => ({
-        id: crypto.randomUUID(),
-        productId: null, // Will be linked if product exists
-        productName: ing.productName,
-        amount: ing.amount,
-        unit: ing.unit || '',
-        optional: ing.optional || false
-      })),
+      categories: data.categories || [],
+      ingredients: data.ingredients.map(ing => {
+        // Handle undefined amounts: if both amount and unit are null, keep as null
+        let amount = ing.amount ?? null
+        let unit = ing.unit ?? null
+
+        // If both are null or empty, treat as undefined amount
+        if ((amount === null || amount === 0) && (unit === null || unit === '')) {
+          amount = null
+          unit = null
+        }
+
+        return {
+          id: crypto.randomUUID(),
+          productId: null, // Will be linked if product exists
+          productName: ing.productName,
+          amount: amount,
+          unit: unit,
+          optional: ing.optional || false
+        }
+      }),
       type: 'dish'
     }
 
@@ -483,10 +657,15 @@ async function importFromJson() {
 }
 
 onMounted(() => {
+  window.addEventListener('resize', onResize)
   productsStore.fetchProducts()
   vendorsStore.fetchVendors()
   vendorsStore.fetchCategories()
   dishesStore.fetchDishes()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', onResize)
 })
 </script>
 
@@ -496,16 +675,20 @@ onMounted(() => {
 
     <!-- Tabs -->
     <v-tabs v-model="activeTab" color="primary" class="mb-4">
-      <v-tab value="vendors">Händler</v-tab>
-      <v-tab value="categories">Kategorien</v-tab>
+      <v-tab value="vendors">Händler & Kategorien</v-tab>
       <v-tab value="products">Produkte</v-tab>
       <v-tab value="dishes">Gerichte</v-tab>
+      <v-tab value="ingredients">Zutaten</v-tab>
     </v-tabs>
 
     <v-window v-model="activeTab">
-      <!-- Vendors Tab -->
+      <!-- Vendors & Categories Tab -->
       <v-window-item value="vendors">
-        <div class="d-flex justify-end mb-4">
+        <div class="d-flex justify-end mb-4 gap-2">
+          <v-btn variant="tonal" color="primary" @click="openCategoryDialog()">
+            <v-icon start icon="mdi-plus" />
+            Neue Kategorie
+          </v-btn>
           <v-btn color="primary" @click="openVendorDialog()">
             <v-icon start icon="mdi-plus" />
             Neuer Händler
@@ -513,55 +696,71 @@ onMounted(() => {
         </div>
 
         <v-card variant="flat" color="surface">
-          <v-list v-if="sortedVendors.length > 0">
-            <v-list-item v-for="vendor in sortedVendors" :key="vendor.id" :title="vendor.name"
-              @click="openVendorDialog(vendor)">
-              <template #prepend>
-                <v-avatar :color="vendor.color" size="32">
-                  <v-icon icon="mdi-store" size="small" color="white" />
-                </v-avatar>
-              </template>
+          <div v-if="vendorsWithCategories.length > 0">
+            <!-- Loop through vendors -->
+            <div v-for="(vendor, vendorIdx) in vendorsWithCategories" :key="vendor.id">
+              <!-- Vendor Header -->
+              <div class="vendor-header">
+                <div class="d-flex align-center gap-2">
+                  <v-avatar :color="vendor.color" size="24">
+                    <v-icon icon="mdi-store" size="small" color="white" />
+                  </v-avatar>
+                  <span class="text-subtitle-1 font-weight-medium">{{ vendor.name }}</span>
+                </div>
+                <div class="d-flex align-center gap-1">
+                  <v-btn icon="mdi-pencil" variant="text" size="x-small" @click="openVendorDialog(vendor)" />
+                  <v-btn icon="mdi-delete" variant="text" size="x-small" color="error" @click="deleteVendor(vendor)" />
+                </div>
+              </div>
 
-              <template #append>
-                <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click.stop="deleteVendor(vendor)" />
-              </template>
-            </v-list-item>
-          </v-list>
+              <!-- Categories for this vendor -->
+              <v-list v-if="vendor.categories.length > 0" density="compact" class="mb-4">
+                <v-list-item
+                  v-for="(category, catIdx) in vendor.categories"
+                  :key="category.id"
+                  @click="openCategoryDialog(category)"
+                  class="category-item"
+                >
+                  <template #prepend>
+                    <v-icon icon="mdi-tag" size="small" color="primary" class="ml-4" />
+                  </template>
+
+                  <v-list-item-title>{{ category.name }}</v-list-item-title>
+
+                  <template #append>
+                    <div class="d-flex align-center gap-1">
+                      <v-btn
+                        icon="mdi-arrow-up"
+                        variant="text"
+                        size="x-small"
+                        :disabled="catIdx === 0"
+                        @click.stop="moveCategoryUp(category, vendor.id)"
+                      />
+                      <v-btn
+                        icon="mdi-arrow-down"
+                        variant="text"
+                        size="x-small"
+                        :disabled="catIdx === vendor.categories.length - 1"
+                        @click.stop="moveCategoryDown(category, vendor.id)"
+                      />
+                      <v-btn icon="mdi-delete" variant="text" size="x-small" color="error" @click.stop="deleteCategory(category)" />
+                    </div>
+                  </template>
+                </v-list-item>
+              </v-list>
+
+              <!-- Empty state for vendor with no categories -->
+              <div v-else class="text-center pa-4 mb-4">
+                <span class="text-caption text-medium-emphasis">Keine Kategorien</span>
+              </div>
+
+              <!-- Divider between vendors -->
+              <v-divider v-if="vendorIdx < vendorsWithCategories.length - 1" class="my-2" />
+            </div>
+          </div>
 
           <v-card-text v-else class="text-center pa-8">
             <div class="text-medium-emphasis">Keine Händler vorhanden</div>
-          </v-card-text>
-        </v-card>
-      </v-window-item>
-
-      <!-- Categories Tab -->
-      <v-window-item value="categories">
-        <div class="d-flex justify-end mb-4">
-          <v-btn color="primary" @click="openCategoryDialog()">
-            <v-icon start icon="mdi-plus" />
-            Neue Kategorie
-          </v-btn>
-        </div>
-
-        <v-card variant="flat" color="surface">
-          <v-list v-if="categoriesWithVendor.length > 0">
-            <v-list-item v-for="cat in categoriesWithVendor" :key="cat.id" :title="cat.name" :subtitle="cat.vendorName"
-              @click="openCategoryDialog(cat)">
-              <template #prepend>
-                <v-avatar :color="cat.vendorColor" size="32">
-                  <v-icon icon="mdi-tag" size="small" color="white" />
-                </v-avatar>
-              </template>
-
-              <template #append>
-                <v-chip size="small" variant="tonal">{{ cat.order }}</v-chip>
-                <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click.stop="deleteCategory(cat)" />
-              </template>
-            </v-list-item>
-          </v-list>
-
-          <v-card-text v-else class="text-center pa-8">
-            <div class="text-medium-emphasis">Keine Kategorien vorhanden</div>
           </v-card-text>
         </v-card>
       </v-window-item>
@@ -572,10 +771,21 @@ onMounted(() => {
           <v-text-field v-model="search" prepend-inner-icon="mdi-magnify" label="Produkte suchen..." clearable
             hide-details style="max-width: 300px" />
 
-          <v-btn color="primary" @click="openProductDialog()">
-            <v-icon start icon="mdi-plus" />
-            Neues Produkt
-          </v-btn>
+          <div class="d-flex gap-2">
+            <v-btn
+              v-if="canShowBulkEditor"
+              variant="tonal"
+              color="primary"
+              @click="showBulkEditor = true"
+            >
+              <v-icon start icon="mdi-table-edit" />
+              Massenbearbeitung
+            </v-btn>
+            <v-btn color="primary" @click="openProductDialog()">
+              <v-icon start icon="mdi-plus" />
+              Neues Produkt
+            </v-btn>
+          </div>
         </div>
 
         <v-card variant="flat" color="surface">
@@ -613,6 +823,15 @@ onMounted(() => {
             hide-details style="max-width: 300px" />
 
           <div class="d-flex gap-2">
+            <v-btn
+              v-if="canShowBulkEditor"
+              variant="tonal"
+              color="primary"
+              @click="showDishBulkEditor = true"
+            >
+              <v-icon start icon="mdi-table-edit" />
+              Massenbearbeitung
+            </v-btn>
             <v-btn variant="tonal" color="primary" @click="openJsonImport()">
               <v-icon start icon="mdi-code-json" />
               JSON Import
@@ -626,13 +845,23 @@ onMounted(() => {
 
         <v-card variant="flat" color="surface">
           <v-list v-if="filteredDishes.length > 0">
-            <v-list-item v-for="dish in filteredDishes" :key="dish.id" :title="dish.name"
-              :subtitle="`${dish.defaultServings} Portionen · ${dish.ingredients?.length || 0} Zutaten`"
-              @click="openDishDialog(dish)">
+            <v-list-item v-for="dish in filteredDishes" :key="dish.id" @click="openDishDialog(dish)">
               <template #prepend>
                 <v-avatar color="primary" variant="tonal">
                   <v-icon :icon="dish.type === 'eating_out' ? 'mdi-food-takeout-box' : 'mdi-food'" />
                 </v-avatar>
+              </template>
+
+              <template #default>
+                <div class="d-flex flex-wrap align-center ga-2 mb-1">
+                  <span class="text-body-1">{{ dish.name }}</span>
+                  <v-chip v-for="cat in dish.categories" :key="cat" size="x-small" variant="tonal" color="primary">
+                    {{ cat }}
+                  </v-chip>
+                </div>
+                <div class="text-caption text-medium-emphasis">
+                  {{ dish.defaultServings }} Portionen · {{ dish.ingredients?.length || 0 }} Zutaten
+                </div>
               </template>
 
               <template #append>
@@ -645,6 +874,68 @@ onMounted(() => {
 
           <v-card-text v-else class="text-center pa-8">
             <div class="text-medium-emphasis">Keine Gerichte gefunden</div>
+          </v-card-text>
+        </v-card>
+      </v-window-item>
+
+      <!-- Ingredients Tab -->
+      <v-window-item value="ingredients">
+        <div class="mb-4">
+          <v-text-field
+            v-model="ingredientSearch"
+            prepend-inner-icon="mdi-magnify"
+            label="Zutat suchen..."
+            clearable
+            hide-details
+            style="max-width: 400px;"
+          />
+        </div>
+
+        <v-card v-if="ingredientSearchResults.length > 0" variant="flat" color="surface">
+          <v-card-text>
+            <div class="text-subtitle-2 mb-3">
+              {{ ingredientSearchResults.length }} Zutat(en) gefunden in {{ dishesUsingIngredient.length }} Gericht(en)
+            </div>
+
+            <!-- Group by ingredient name -->
+            <div v-for="(group, idx) in groupedIngredients" :key="idx" class="mb-6">
+              <div class="text-subtitle-1 font-weight-bold mb-2">
+                {{ group.ingredientName }}
+              </div>
+              <v-list density="compact">
+                <v-list-item
+                  v-for="dish in group.dishes"
+                  :key="dish.id"
+                  :to="`/gerichte/${dish.id}`"
+                >
+                  <template #prepend>
+                    <v-icon icon="mdi-food" color="primary" />
+                  </template>
+                  <v-list-item-title>{{ dish.name }}</v-list-item-title>
+                  <v-list-item-subtitle>
+                    {{ dish.ingredientAmount }} {{ dish.ingredientUnit }}
+                    <span v-if="dish.ingredientOptional" class="text-medium-emphasis"> (optional)</span>
+                  </v-list-item-subtitle>
+                </v-list-item>
+              </v-list>
+            </div>
+          </v-card-text>
+        </v-card>
+
+        <v-card v-else-if="ingredientSearch" variant="flat" color="surface">
+          <v-card-text class="text-center pa-8">
+            <div class="text-medium-emphasis">
+              Keine Gerichte mit dieser Zutat gefunden
+            </div>
+          </v-card-text>
+        </v-card>
+
+        <v-card v-else variant="flat" color="surface">
+          <v-card-text class="text-center pa-8">
+            <v-icon icon="mdi-information-outline" size="48" class="mb-3 text-medium-emphasis" />
+            <div class="text-medium-emphasis">
+              Geben Sie eine Zutat ein, um alle Gerichte zu finden, die diese Zutat verwenden
+            </div>
           </v-card-text>
         </v-card>
       </v-window-item>
@@ -710,7 +1001,7 @@ onMounted(() => {
             </v-col>
             <v-col cols="6">
               <v-text-field v-model.number="productForm.freshnessDays" label="Haltbarkeit (Tage)" type="number"
-                min="1" />
+                inputmode="numeric" min="1" />
             </v-col>
           </v-row>
         </v-card-text>
@@ -741,8 +1032,20 @@ onMounted(() => {
                 prepend-inner-icon="mdi-link" />
             </v-col>
             <v-col cols="12" md="4">
-              <v-text-field v-model.number="dishForm.defaultServings" label="Standard-Portionen" type="number" min="1"
+              <v-text-field v-model.number="dishForm.defaultServings" label="Standard-Portionen" type="number" inputmode="numeric" min="1"
                 max="20" />
+            </v-col>
+            <v-col cols="12">
+              <v-select
+                v-model="dishForm.categories"
+                :items="availableCategories"
+                label="Kategorien"
+                multiple
+                chips
+                closable-chips
+                hint="Wähle eine oder mehrere Kategorien für dieses Gericht"
+                persistent-hint
+              />
             </v-col>
           </v-row>
 
@@ -760,8 +1063,14 @@ onMounted(() => {
           </div>
 
           <v-list v-if="dishForm.ingredients.length > 0" density="compact">
-            <v-list-item v-for="ing in dishForm.ingredients" :key="ing.id" :title="ing.productName"
-              :subtitle="`${ing.amount} ${ing.unit}${ing.optional ? ' (optional)' : ''}`">
+            <v-list-item v-for="ing in dishForm.ingredients" :key="ing.id" :title="ing.productName">
+              <template #subtitle>
+                <span v-if="ing.amount !== null && ing.unit !== null">
+                  {{ ing.amount }} {{ ing.unit }}{{ ing.optional ? ' (optional)' : '' }}
+                </span>
+                <span v-else-if="ing.optional">(optional)</span>
+              </template>
+
               <template #prepend>
                 <v-icon icon="mdi-circle-small" />
               </template>
@@ -808,8 +1117,8 @@ onMounted(() => {
 
           <v-row>
             <v-col cols="6">
-              <v-text-field v-model.number="ingredientForm.amount" label="Menge pro Portion" type="number" min="0"
-                step="0.1" />
+              <v-text-field v-model.number="ingredientForm.amount" label="Menge pro Portion" type="number"
+                inputmode="decimal" min="0" step="0.1" />
             </v-col>
             <v-col cols="6">
               <v-combobox v-model="ingredientForm.unit" :items="commonUnits" label="Einheit" />
@@ -867,6 +1176,12 @@ onMounted(() => {
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Product Bulk Editor -->
+    <ProductBulkEditor v-model="showBulkEditor" />
+
+    <!-- Dish Bulk Editor -->
+    <DishBulkEditor v-model="showDishBulkEditor" />
   </div>
 </template>
 
@@ -874,5 +1189,31 @@ onMounted(() => {
 .json-input :deep(textarea) {
   font-family: 'Courier New', monospace;
   font-size: 0.875rem;
+}
+
+.vendor-header {
+  padding: 12px 8px 12px 16px !important;
+  background: rgba(var(--v-theme-primary), 0.05);
+  border-radius: 8px;
+  margin: 8px 8px 4px 8px;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-wrap: nowrap !important;
+  min-height: auto !important;
+  height: auto !important;
+}
+
+.vendor-header > div {
+  flex-shrink: 0;
+}
+
+.vendor-header > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.category-item {
+  padding-left: 24px !important;
 }
 </style>
