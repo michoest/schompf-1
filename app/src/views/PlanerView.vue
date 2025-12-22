@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useMealsStore, useDishesStore, useAppStore, useShoppingStore } from '@/stores'
 import MealSlot from '@/components/MealSlot.vue'
 import DishSelector from '@/components/DishSelector.vue'
+import api from '@/services/api'
 
 const mealsStore = useMealsStore()
 const dishesStore = useDishesStore()
@@ -130,7 +131,7 @@ const uncommittedMealsInRange = computed(() => {
     m.date >= formatDate(rangeStart.value) &&
     m.date <= formatDate(rangeEnd.value) &&
     m.dishId && // Only meals with dishes
-    !m.committed
+    (!m.status || m.status === 'planned')
   )
 })
 
@@ -279,7 +280,7 @@ async function editMeal(meal) {
   if (isEatingOut) {
     // Show special sheet for eating out meals
     showEatingOutMealSheet.value = true
-  } else if (meal.committed) {
+  } else if (meal.status === 'committed' || meal.status === 'prepared') {
     // Check if dish has a recipe URL
     selectedDishHasRecipe.value = false
     if (meal.dishId) {
@@ -292,7 +293,7 @@ async function editMeal(meal) {
     }
     showCommittedMealSheet.value = true
   } else {
-    // For uncommitted meals, check if dish has a recipe URL
+    // For planned meals, check if dish has a recipe URL
     selectedDishHasRecipe.value = false
     if (meal.dishId) {
       try {
@@ -317,6 +318,11 @@ function editCommittedMeal() {
 }
 
 function openMoveMealDialog() {
+  // Don't allow moving prepared meals
+  if (selectedMeal.value.status === 'prepared') {
+    appStore.showSnackbar('Zubereitete Mahlzeiten können nicht verschoben werden', 'warning')
+    return
+  }
   showCommittedMealSheet.value = false
   showUncommittedMealSheet.value = false
   moveToDate.value = selectedMeal.value.date
@@ -334,7 +340,7 @@ async function confirmMoveMeal() {
     showMoveMealDialog.value = false
     appStore.showSnackbar('Mahlzeit verschoben')
   } catch (error) {
-    appStore.showSnackbar('Fehler beim Verschieben', 'error')
+    appStore.showSnackbar('Fehler beim Verschieben der Mahlzeit', 'error')
   }
 }
 
@@ -347,9 +353,10 @@ async function showRecipe() {
   try {
     const dish = await dishesStore.fetchDish(selectedMeal.value.dishId)
     if (dish?.recipeUrl) {
-      // Open recipe URL in new tab
-      window.open(dish.recipeUrl, '_blank')
+      // Use location.href for better PWA compatibility
+      window.location.href = dish.recipeUrl
       showCommittedMealSheet.value = false
+      showUncommittedMealSheet.value = false
     } else {
       appStore.showSnackbar('Kein Rezept-Link hinterlegt', 'warning')
     }
@@ -379,7 +386,7 @@ async function onDishSelected({ dish, servings }) {
       appStore.showSnackbar('Mahlzeit aktualisiert')
     }
   } catch (error) {
-    appStore.showSnackbar('Fehler beim Speichern', 'error')
+    appStore.showSnackbar('Fehler beim Speichern der Mahlzeit', 'error')
   }
   showDishSelector.value = false
 }
@@ -404,7 +411,7 @@ async function saveEatingOutDescription() {
     editingEatingOutDescription.value = ''
     appStore.showSnackbar('Beschreibung aktualisiert')
   } catch (error) {
-    appStore.showSnackbar('Fehler beim Speichern', 'error')
+    appStore.showSnackbar('Fehler beim Speichern der Beschreibung', 'error')
   }
 }
 
@@ -416,13 +423,43 @@ function deleteEatingOutMeal() {
 
 function deleteMeal(meal) {
   // Show warning for committed meals
-  if (meal.committed) {
+  if (meal.status === 'committed' || meal.status === 'prepared') {
     mealToDelete.value = meal
     showDeleteDialog.value = true
   } else {
-    // Delete immediately for uncommitted meals
+    // Delete immediately for planned meals
     mealToDelete.value = meal
     confirmDelete()
+  }
+}
+
+async function markMealPrepared() {
+  try {
+    const updatedMeal = await api.markMealPrepared(selectedMeal.value.id)
+    // Update meal in store
+    const index = mealsStore.meals.findIndex(m => m.id === selectedMeal.value.id)
+    if (index !== -1) {
+      mealsStore.meals[index] = updatedMeal
+    }
+    showCommittedMealSheet.value = false
+    appStore.showSnackbar('Mahlzeit als zubereitet markiert')
+  } catch (error) {
+    appStore.showSnackbar('Fehler beim Markieren der Mahlzeit', 'error')
+  }
+}
+
+async function resetMealToCommitted() {
+  try {
+    const updatedMeal = await api.resetMealToCommitted(selectedMeal.value.id)
+    // Update meal in store
+    const index = mealsStore.meals.findIndex(m => m.id === selectedMeal.value.id)
+    if (index !== -1) {
+      mealsStore.meals[index] = updatedMeal
+    }
+    showCommittedMealSheet.value = false
+    appStore.showSnackbar('Mahlzeit zurückgesetzt')
+  } catch (error) {
+    appStore.showSnackbar('Fehler beim Zurücksetzen der Mahlzeit', 'error')
   }
 }
 
@@ -435,7 +472,7 @@ async function confirmDelete() {
     showDeleteDialog.value = false
     mealToDelete.value = null
   } catch (error) {
-    appStore.showSnackbar('Fehler beim Löschen', 'error')
+    appStore.showSnackbar('Fehler beim Löschen der Mahlzeit', 'error')
   }
 }
 
@@ -848,6 +885,18 @@ onMounted(() => {
             </v-list-item>
 
             <v-divider class="my-2" />
+
+            <v-list-item v-if="selectedMeal?.status === 'committed'" @click="markMealPrepared" prepend-icon="mdi-check-all">
+              <v-list-item-title>Als zubereitet markieren</v-list-item-title>
+              <v-list-item-subtitle>Mahlzeit wurde gekocht</v-list-item-subtitle>
+            </v-list-item>
+
+            <v-list-item v-if="selectedMeal?.status === 'prepared'" @click="resetMealToCommitted" prepend-icon="mdi-undo-variant">
+              <v-list-item-title>Zurücksetzen</v-list-item-title>
+              <v-list-item-subtitle>Status auf 'committet' zurücksetzen</v-list-item-subtitle>
+            </v-list-item>
+
+            <v-divider v-if="selectedMeal?.status === 'committed' || selectedMeal?.status === 'prepared'" class="my-2" />
 
             <v-list-item @click="deleteMeal(selectedMeal); showCommittedMealSheet = false" prepend-icon="mdi-delete"
               class="text-error">

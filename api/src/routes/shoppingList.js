@@ -54,6 +54,11 @@ function normalizeUnit(amount, unit) {
 }
 
 function formatAmount(amount, unit) {
+  // Handle null or 0 amounts (unspecified amounts like "salt", "pepper", etc.)
+  if (amount === null || amount === 0 || amount === undefined) {
+    return { amount: 0, unit: unit || '', display: '' };
+  }
+
   // Convert back to larger units if appropriate
   if (unit === 'g' && amount >= 1000) {
     return { amount: amount / 1000, unit: 'kg', display: `${(amount / 1000).toFixed(1).replace(/\.0$/, '')} kg` };
@@ -61,7 +66,7 @@ function formatAmount(amount, unit) {
   if (unit === 'ml' && amount >= 1000) {
     return { amount: amount / 1000, unit: 'l', display: `${(amount / 1000).toFixed(1).replace(/\.0$/, '')} l` };
   }
-  
+
   const displayAmount = Number.isInteger(amount) ? amount : amount.toFixed(1).replace(/\.0$/, '');
   return { amount, unit, display: unit ? `${displayAmount} ${unit}` : `${displayAmount}` };
 }
@@ -131,7 +136,7 @@ router.post('/generate', async (req, res) => {
 
     // Get meals in date range that are NOT yet committed
     const meals = db.data.meals.filter(m =>
-      m.date >= fromDate && m.date <= toDate && !m.committed
+      m.date >= fromDate && m.date <= toDate && (!m.status || m.status === 'planned')
     );
 
     // Collect all ingredients with traceability

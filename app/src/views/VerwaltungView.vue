@@ -379,6 +379,8 @@ async function moveCategoryUp(category, vendorId) {
     // Swap orders
     await vendorsStore.updateCategory(category.id, { order: prevCategory.order })
     await vendorsStore.updateCategory(prevCategory.id, { order: category.order })
+    // Refetch to ensure UI is updated
+    await vendorsStore.fetchCategories()
     appStore.showSnackbar('Reihenfolge aktualisiert')
   } catch (error) {
     appStore.showSnackbar('Fehler beim Verschieben', 'error')
@@ -398,6 +400,8 @@ async function moveCategoryDown(category, vendorId) {
     // Swap orders
     await vendorsStore.updateCategory(category.id, { order: nextCategory.order })
     await vendorsStore.updateCategory(nextCategory.id, { order: category.order })
+    // Refetch to ensure UI is updated
+    await vendorsStore.fetchCategories()
     appStore.showSnackbar('Reihenfolge aktualisiert')
   } catch (error) {
     appStore.showSnackbar('Fehler beim Verschieben', 'error')
@@ -675,7 +679,7 @@ onUnmounted(() => {
 
     <!-- Tabs -->
     <v-tabs v-model="activeTab" color="primary" class="mb-4">
-      <v-tab value="vendors">Händler & Kategorien</v-tab>
+      <v-tab value="vendors">Kategorien</v-tab>
       <v-tab value="products">Produkte</v-tab>
       <v-tab value="dishes">Gerichte</v-tab>
       <v-tab value="ingredients">Zutaten</v-tab>
@@ -913,7 +917,9 @@ onUnmounted(() => {
                   </template>
                   <v-list-item-title>{{ dish.name }}</v-list-item-title>
                   <v-list-item-subtitle>
-                    {{ dish.ingredientAmount }} {{ dish.ingredientUnit }}
+                    <span v-if="dish.ingredientAmount !== null && dish.ingredientAmount !== 0">
+                      {{ dish.ingredientAmount }} {{ dish.ingredientUnit }}
+                    </span>
                     <span v-if="dish.ingredientOptional" class="text-medium-emphasis"> (optional)</span>
                   </v-list-item-subtitle>
                 </v-list-item>
@@ -1065,7 +1071,7 @@ onUnmounted(() => {
           <v-list v-if="dishForm.ingredients.length > 0" density="compact">
             <v-list-item v-for="ing in dishForm.ingredients" :key="ing.id" :title="ing.productName">
               <template #subtitle>
-                <span v-if="ing.amount !== null && ing.unit !== null">
+                <span v-if="ing.amount !== null && ing.amount !== 0 && ing.unit !== null">
                   {{ ing.amount }} {{ ing.unit }}{{ ing.optional ? ' (optional)' : '' }}
                 </span>
                 <span v-else-if="ing.optional">(optional)</span>

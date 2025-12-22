@@ -89,7 +89,7 @@ router.post('/', async (req, res) => {
       dishName: dishName || dish?.name || null,
       servings: servings || dish?.defaultServings || db.data.settings.defaultServings,
       notes: notes || null,
-      committed: false, // New field: whether ingredients are on shopping list
+      status: 'planned', // planned | committed | prepared
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -111,7 +111,7 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Mahlzeit nicht gefunden' });
     }
 
-    const { date, slotId, slotName, slotOrder, dishId, dishName, servings, notes, committed } = req.body;
+    const { date, slotId, slotName, slotOrder, dishId, dishName, servings, notes, status } = req.body;
 
     // Verify dish exists if changing
     let dish = null;
@@ -136,7 +136,7 @@ router.put('/:id', async (req, res) => {
       dishName: dishName !== undefined ? dishName : (dishId !== undefined ? (dish?.name || null) : db.data.meals[index].dishName),
       servings: servings ?? db.data.meals[index].servings,
       notes: notes !== undefined ? notes : db.data.meals[index].notes,
-      committed: committed !== undefined ? committed : (db.data.meals[index].committed || false),
+      status: status !== undefined ? status : (db.data.meals[index].status || db.data.meals[index].committed ? 'committed' : 'planned'),
       updatedAt: new Date().toISOString()
     };
     
@@ -196,7 +196,7 @@ router.post('/bulk', async (req, res) => {
         dishName: dish?.name || null,
         servings: servings || dish?.defaultServings || db.data.settings.defaultServings,
         notes: notes || null,
-        committed: false,
+        status: 'planned',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -226,7 +226,7 @@ router.post('/commit', async (req, res) => {
     for (const mealId of mealIds) {
       const index = db.data.meals.findIndex(m => m.id === mealId);
       if (index !== -1) {
-        db.data.meals[index].committed = true;
+        db.data.meals[index].status = 'committed';
         db.data.meals[index].updatedAt = new Date().toISOString();
         updatedMeals.push(db.data.meals[index]);
       }
@@ -236,6 +236,44 @@ router.post('/commit', async (req, res) => {
     res.json({ success: true, updatedMeals });
   } catch (error) {
     res.status(500).json({ error: 'Fehler beim Committen der Mahlzeiten' });
+  }
+});
+
+// Mark meal as prepared
+router.post('/:id/mark-prepared', async (req, res) => {
+  try {
+    await db.read();
+    const index = db.data.meals.findIndex(m => m.id === req.params.id);
+    if (index === -1) {
+      return res.status(404).json({ error: 'Mahlzeit nicht gefunden' });
+    }
+
+    db.data.meals[index].status = 'prepared';
+    db.data.meals[index].updatedAt = new Date().toISOString();
+
+    await db.write();
+    res.json(db.data.meals[index]);
+  } catch (error) {
+    res.status(500).json({ error: 'Fehler beim Markieren der Mahlzeit als zubereitet' });
+  }
+});
+
+// Reset meal to committed status
+router.post('/:id/reset-to-committed', async (req, res) => {
+  try {
+    await db.read();
+    const index = db.data.meals.findIndex(m => m.id === req.params.id);
+    if (index === -1) {
+      return res.status(404).json({ error: 'Mahlzeit nicht gefunden' });
+    }
+
+    db.data.meals[index].status = 'committed';
+    db.data.meals[index].updatedAt = new Date().toISOString();
+
+    await db.write();
+    res.json(db.data.meals[index]);
+  } catch (error) {
+    res.status(500).json({ error: 'Fehler beim Zurücksetzen der Mahlzeit' });
   }
 });
 

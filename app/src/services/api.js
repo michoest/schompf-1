@@ -154,6 +154,14 @@ class ApiService {
     return this.request('/api/meals/commit', { method: 'POST', body: JSON.stringify({ mealIds }) })
   }
 
+  async markMealPrepared(mealId) {
+    return this.request(`/api/meals/${mealId}/mark-prepared`, { method: 'POST' })
+  }
+
+  async resetMealToCommitted(mealId) {
+    return this.request(`/api/meals/${mealId}/reset-to-committed`, { method: 'POST' })
+  }
+
   // Shopping List
   async getCurrentShoppingList() {
     return this.request('/api/shopping-list/current')

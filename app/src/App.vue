@@ -51,8 +51,7 @@ onUnmounted(() => {
       />
 
       <v-app-bar-title class="d-flex align-center justify-center">
-        <v-icon icon="mdi-chef-hat" class="mr-2" />
-        <span class="font-weight-bold">Schompf</span>
+        <v-icon icon="mdi-chef-hat" />
       </v-app-bar-title>
 
       <!-- Spacer for centering on desktop -->
@@ -116,6 +115,7 @@ onUnmounted(() => {
       grow
       color="primary"
       elevation="8"
+      fixed
       class="safe-area-bottom"
     >
       <v-btn 
@@ -155,7 +155,8 @@ onUnmounted(() => {
 }
 
 .safe-area-bottom {
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom) !important;
+  height: calc(56px + env(safe-area-inset-bottom)) !important;
 }
 
 .fade-enter-active,

@@ -290,7 +290,7 @@ watch(() => route.params.id, loadDish)
             :title="ing.productName"
           >
             <template #subtitle>
-              <span v-if="ing.amount !== null && ing.unit !== null">
+              <span v-if="ing.amount !== null && ing.amount !== 0 && ing.unit !== null">
                 {{ ing.amount }} {{ ing.unit }}{{ ing.optional ? ' (optional)' : '' }}
               </span>
               <span v-else-if="ing.optional">(optional)</span>

@@ -112,41 +112,6 @@ function resetToDefaults() {
       </v-card-text>
     </v-card>
 
-    <!-- Defaults -->
-    <v-card variant="flat" color="surface" class="mb-4">
-      <v-card-title class="d-flex align-center">
-        <v-icon icon="mdi-tune" class="mr-2" />
-        Standardwerte
-      </v-card-title>
-      <v-card-text>
-        <v-row>
-          <v-col cols="12" md="6">
-            <v-text-field
-              v-model.number="defaultServings"
-              label="Standard-Portionen"
-              type="number"
-              inputmode="numeric"
-              min="1"
-              max="20"
-              hint="Wird für neue Gerichte verwendet"
-              persistent-hint
-            />
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-text-field
-              v-model.number="defaultFreshnessDays"
-              label="Standard-Haltbarkeit (Tage)"
-              type="number"
-              inputmode="numeric"
-              min="1"
-              hint="Wird für neue Produkte verwendet"
-              persistent-hint
-            />
-          </v-col>
-        </v-row>
-      </v-card-text>
-    </v-card>
-
     <!-- Advanced Settings -->
     <v-card variant="flat" color="surface" class="mb-4">
       <v-card-title class="d-flex align-center" style="cursor: pointer" @click="showAdvancedSettings = !showAdvancedSettings">
@@ -158,6 +123,37 @@ function resetToDefaults() {
 
       <v-expand-transition>
         <v-card-text v-show="showAdvancedSettings">
+          <!-- Defaults -->
+          <div class="text-subtitle-2 mb-3">Standardwerte</div>
+          <v-row class="mb-6">
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model.number="defaultServings"
+                label="Standard-Portionen"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                max="20"
+                hint="Wird für neue Gerichte verwendet"
+                persistent-hint
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model.number="defaultFreshnessDays"
+                label="Standard-Haltbarkeit (Tage)"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                hint="Wird für neue Produkte verwendet"
+                persistent-hint
+              />
+            </v-col>
+          </v-row>
+
+          <v-divider class="mb-4" />
+
+          <!-- Meal Slots -->
           <div class="text-subtitle-2 mb-3">Mahlzeiten pro Tag</div>
           <p class="text-body-2 text-medium-emphasis mb-4">
             Definiere die Mahlzeiten, die du täglich planen möchtest.

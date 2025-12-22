@@ -19,15 +19,16 @@ const hasMeals = computed(() => props.meals.length > 0)
 
 <template>
   <div class="meal-slot">
-    <div class="meal-items-container">
+    <div class="meal-items-container" :class="{ 'has-meals': hasMeals }">
       <!-- Existing meals -->
-      <div class="meals-list">
+      <div v-if="hasMeals" class="meals-list">
         <div
           v-for="meal in meals"
           :key="meal.id"
           class="meal-item"
           :class="{
-            'meal-committed': meal.committed,
+            'meal-committed': meal.status === 'committed',
+            'meal-prepared': meal.status === 'prepared',
             'meal-editing': editingMealId === meal.id
           }"
           @click="emit('edit', meal)"
@@ -36,13 +37,19 @@ const hasMeals = computed(() => props.meals.length > 0)
             <div class="d-flex align-center gap-1">
               <span class="meal-name">{{ meal.dishName || 'Leer' }}</span>
               <v-icon
-                v-if="meal.committed"
+                v-if="meal.status === 'committed'"
                 icon="mdi-cart-check"
                 size="x-small"
                 class="committed-icon"
               />
+              <v-icon
+                v-if="meal.status === 'prepared'"
+                icon="mdi-check-all"
+                size="x-small"
+                class="prepared-icon"
+              />
             </div>
-            <span v-if="meal.servings" class="meal-servings">
+            <span v-if="meal.servings && meal.dishId" class="meal-servings">
               {{ meal.servings }} Portionen
             </span>
           </div>
@@ -74,12 +81,12 @@ const hasMeals = computed(() => props.meals.length > 0)
       <!-- Add button -->
       <v-btn
         variant="text"
-        :size="hasMeals ? 'small' : 'small'"
+        size="small"
         color="primary"
         :class="hasMeals ? 'add-more-btn' : 'add-btn'"
         @click="emit('add')"
       >
-        <v-icon icon="mdi-plus" :size="hasMeals ? 'small' : 'small'" />
+        <v-icon icon="mdi-plus" size="small" />
       </v-btn>
     </div>
   </div>
@@ -89,15 +96,14 @@ const hasMeals = computed(() => props.meals.length > 0)
 .meal-slot {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  height: 100%;
   min-height: 52px;
 }
 
 .meal-items-container {
   display: flex;
   gap: 4px;
-  align-items: flex-start;
+  align-items: center;
+  min-height: 52px;
 }
 
 .meals-list {
@@ -106,6 +112,7 @@ const hasMeals = computed(() => props.meals.length > 0)
   gap: 2px;
   flex: 1;
   min-width: 0;
+  justify-content: center;
 }
 
 .meal-item {
@@ -141,6 +148,26 @@ const hasMeals = computed(() => props.meals.length > 0)
 .committed-icon {
   color: rgb(var(--v-theme-success));
   flex-shrink: 0;
+}
+
+.prepared-icon {
+  color: rgb(var(--v-theme-success));
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.meal-item.meal-prepared {
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  opacity: 0.6;
+}
+
+.meal-item.meal-prepared:hover {
+  background: rgba(var(--v-theme-on-surface), 0.1);
+  opacity: 0.7;
+}
+
+.meal-item.meal-prepared .meal-name {
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
 .meal-content {
@@ -185,12 +212,14 @@ const hasMeals = computed(() => props.meals.length > 0)
 }
 
 .add-btn {
-  min-height: 44px;
+  flex: 1;
+  height: 100%;
+  min-height: 52px;
   align-self: stretch;
 }
 
 .add-more-btn {
-  align-self: flex-start;
+  align-self: center;
   flex-shrink: 0;
 }
 </style>

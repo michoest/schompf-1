@@ -608,7 +608,7 @@ async function clearAllItems() {
               </v-list-item-title>
               <v-list-item-subtitle v-if="source.mealDate">
                 {{ formatDate(source.mealDate) }} · {{ source.mealSlot }}
-                <span v-if="source.amount">
+                <span v-if="source.amount && source.amount !== 0">
                   · {{ source.amount }} {{ source.unit }}
                 </span>
               </v-list-item-subtitle>
