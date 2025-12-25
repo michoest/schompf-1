@@ -53,6 +53,7 @@ const showDishDialog = ref(false)
 const editingDish = ref(null)
 const dishForm = ref({
   name: '',
+  recipe: '',
   recipeUrl: '',
   defaultServings: 2,
   categories: [],
@@ -90,7 +91,7 @@ const jsonError = ref('')
 // Ingredient search
 const ingredientSearch = ref('')
 
-const commonUnits = ['g', 'kg', 'ml', 'l', 'Stück', 'EL', 'TL', 'Bund', 'Packung', 'Dose']
+const commonUnits = ['g', 'kg', 'ml', 'l', 'Stück', 'EL', 'TL', 'Bund', 'Packung', 'Dose', 'Paar']
 const vendorColors = [
   '#10B981', '#0EA5E9', '#8B5CF6', '#F97316',
   '#EF4444', '#EC4899', '#14B8A6', '#6366F1'
@@ -462,6 +463,7 @@ function openDishDialog(dish = null) {
     editingDish.value = dish
     dishForm.value = {
       name: dish.name,
+      recipe: dish.recipe || '',
       recipeUrl: dish.recipeUrl || '',
       defaultServings: dish.defaultServings,
       categories: [...(dish.categories || [])],
@@ -471,6 +473,7 @@ function openDishDialog(dish = null) {
     editingDish.value = null
     dishForm.value = {
       name: '',
+      recipe: '',
       recipeUrl: '',
       defaultServings: 2,
       categories: [],
@@ -489,6 +492,7 @@ async function saveDish() {
   try {
     const data = {
       name: dishForm.value.name.trim(),
+      recipe: dishForm.value.recipe || null,
       recipeUrl: dishForm.value.recipeUrl || null,
       defaultServings: dishForm.value.defaultServings,
       categories: dishForm.value.categories,
@@ -910,7 +914,7 @@ onUnmounted(() => {
                 <v-list-item
                   v-for="dish in group.dishes"
                   :key="dish.id"
-                  :to="`/gerichte/${dish.id}`"
+                  @click="openDishDialog(dishesStore.dishes.find(d => d.id === dish.id))"
                 >
                   <template #prepend>
                     <v-icon icon="mdi-food" color="primary" />
@@ -1051,6 +1055,17 @@ onUnmounted(() => {
                 closable-chips
                 hint="Wähle eine oder mehrere Kategorien für dieses Gericht"
                 persistent-hint
+              />
+            </v-col>
+            <v-col cols="12">
+              <v-textarea
+                v-model="dishForm.recipe"
+                label="Rezept / Zubereitungsanleitung"
+                hint="Hier kannst du die Zubereitung Schritt für Schritt beschreiben"
+                persistent-hint
+                rows="6"
+                auto-grow
+                prepend-inner-icon="mdi-book-open-variant"
               />
             </v-col>
           </v-row>

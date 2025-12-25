@@ -42,7 +42,7 @@ router.get('/:id', async (req, res) => {
 // Create dish
 router.post('/', async (req, res) => {
   try {
-    const { name, recipeUrl, ingredients, defaultServings, type, subDishes, categories } = req.body;
+    const { name, recipe, recipeUrl, ingredients, defaultServings, type, subDishes, categories } = req.body;
     if (!name) {
       return res.status(400).json({ error: 'Name ist erforderlich' });
     }
@@ -66,6 +66,7 @@ router.post('/', async (req, res) => {
     const dish = {
       id: uuidv4(),
       name,
+      recipe: recipe || null,
       recipeUrl: recipeUrl || null,
       ingredients: validatedIngredients,
       defaultServings: defaultServings || db.data.settings.defaultServings,
@@ -93,7 +94,7 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Gericht nicht gefunden' });
     }
     
-    const { name, recipeUrl, ingredients, defaultServings, type, subDishes, categories } = req.body;
+    const { name, recipe, recipeUrl, ingredients, defaultServings, type, subDishes, categories } = req.body;
 
     // Validate ingredients if provided
     let validatedIngredients = db.data.dishes[index].ingredients;
@@ -120,6 +121,7 @@ router.put('/:id', async (req, res) => {
     db.data.dishes[index] = {
       ...db.data.dishes[index],
       name: name ?? db.data.dishes[index].name,
+      recipe: recipe !== undefined ? recipe : db.data.dishes[index].recipe,
       recipeUrl: recipeUrl !== undefined ? recipeUrl : db.data.dishes[index].recipeUrl,
       ingredients: validatedIngredients,
       defaultServings: defaultServings ?? db.data.dishes[index].defaultServings,

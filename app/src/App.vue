@@ -38,6 +38,9 @@ onUnmounted(() => {
 
 <template>
   <v-app>
+    <!-- Safe area background for top -->
+    <div class="safe-area-bg" />
+
     <!-- App Bar -->
     <v-app-bar
       color="primary"
@@ -150,8 +153,18 @@ onUnmounted(() => {
 
 <style>
 /* Safe area support for PWA */
+.safe-area-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top);
+  background: rgb(var(--v-theme-primary));
+  z-index: 1000;
+}
+
 .safe-area-top {
-  margin-top: env(safe-area-inset-top);
+  padding-top: env(safe-area-inset-top) !important;
 }
 
 .safe-area-bottom {
@@ -174,6 +187,6 @@ onUnmounted(() => {
 }
 
 .mb-16 {
-  margin-bottom: calc(64px + env(safe-area-inset-bottom)) !important;
+  margin-bottom: calc(80px + env(safe-area-inset-bottom)) !important;
 }
 </style>

@@ -12,7 +12,7 @@ const showSourceDialog = ref(false)
 const selectedItem = ref(null)
 
 const showAddItemDialog = ref(false)
-const newItem = ref({ name: '', amount: 1, unit: 'Stück', categoryId: null })
+const newItem = ref({ name: '', amount: null, unit: '', categoryId: null })
 const userSelectedCategory = ref(false)
 
 const showEditItemDialog = ref(false)
@@ -54,7 +54,7 @@ watch(() => newItem.value.name, (name) => {
 
 watch(showAddItemDialog, (open) => {
   if (open) {
-    newItem.value = { name: '', amount: 1, unit: 'Stück', categoryId: null }
+    newItem.value = { name: '', amount: null, unit: '', categoryId: null }
     userSelectedCategory.value = false
   }
 })
@@ -181,10 +181,11 @@ async function addManualItem() {
   }
 
   try {
+    const amount = newItem.value.amount ? parseFloat(newItem.value.amount) : null
     const item = await api.addShoppingItem({
       productName: newItem.value.name.trim(),
-      amount: parseFloat(newItem.value.amount) || 1,
-      unit: newItem.value.unit,
+      amount: amount,
+      unit: newItem.value.unit || null,
       categoryId: newItem.value.categoryId
     })
 
@@ -194,7 +195,7 @@ async function addManualItem() {
 
     const productName = newItem.value.name.trim()
     showAddItemDialog.value = false
-    newItem.value = { name: '', amount: 1, unit: 'Stück', categoryId: null }
+    newItem.value = { name: '', amount: null, unit: '', categoryId: null }
     userSelectedCategory.value = false
     appStore.showSnackbar(`${productName} hinzugefügt`)
   } catch (error) {
@@ -546,7 +547,7 @@ async function clearAllItems() {
     </v-card>
 
     <!-- FAB for adding manual items -->
-    <v-btn v-if="shoppingStore.shoppingList" color="accent" icon="mdi-plus" size="large" position="fixed"
+    <v-btn v-if="!shoppingStore.loading" color="accent" icon="mdi-plus" size="large" position="fixed"
       location="bottom end" class="mb-16 mr-4" elevation="4" @click="showAddItemDialog = true" />
 
     <!-- Add item dialog -->
@@ -560,7 +561,7 @@ async function clearAllItems() {
               <v-text-field v-model.number="newItem.amount" label="Menge" type="number" inputmode="decimal" min="0" step="0.1" />
             </v-col>
             <v-col cols="6">
-              <v-combobox v-model="newItem.unit" :items="['Stück', 'g', 'kg', 'ml', 'l', 'Packung', 'Bund']"
+              <v-combobox v-model="newItem.unit" :items="['Stück', 'g', 'kg', 'ml', 'l', 'Packung', 'Bund', 'Paar']"
                 label="Einheit" />
             </v-col>
           </v-row>
@@ -633,7 +634,7 @@ async function clearAllItems() {
               <v-text-field v-model.number="editItem.amount" label="Menge" type="number" inputmode="decimal" min="0" step="0.1" />
             </v-col>
             <v-col cols="6">
-              <v-combobox v-model="editItem.unit" :items="['Stück', 'g', 'kg', 'ml', 'l', 'Packung', 'Bund']"
+              <v-combobox v-model="editItem.unit" :items="['Stück', 'g', 'kg', 'ml', 'l', 'Packung', 'Bund', 'Paar']"
                 label="Einheit" />
             </v-col>
           </v-row>

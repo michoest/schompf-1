@@ -96,14 +96,14 @@ const hasMeals = computed(() => props.meals.length > 0)
 .meal-slot {
   display: flex;
   flex-direction: column;
-  min-height: 52px;
+  min-height: 60px;
 }
 
 .meal-items-container {
   display: flex;
   gap: 4px;
   align-items: center;
-  min-height: 52px;
+  min-height: 60px;
 }
 
 .meals-list {
@@ -112,6 +112,7 @@ const hasMeals = computed(() => props.meals.length > 0)
   gap: 2px;
   flex: 1;
   min-width: 0;
+  min-height: 60px;
   justify-content: center;
 }
 
@@ -120,6 +121,7 @@ const hasMeals = computed(() => props.meals.length > 0)
   align-items: center;
   justify-content: space-between;
   padding: 4px 6px;
+  min-height: 52px;
   background: rgba(var(--v-theme-primary), 0.1);
   border-radius: 6px;
   cursor: pointer;
@@ -214,7 +216,7 @@ const hasMeals = computed(() => props.meals.length > 0)
 .add-btn {
   flex: 1;
   height: 100%;
-  min-height: 52px;
+  min-height: 60px;
   align-self: stretch;
 }
 

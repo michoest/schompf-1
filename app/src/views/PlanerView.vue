@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useMealsStore, useDishesStore, useAppStore, useShoppingStore } from '@/stores'
 import MealSlot from '@/components/MealSlot.vue'
 import DishSelector from '@/components/DishSelector.vue'
+import RecipeViewer from '@/components/RecipeViewer.vue'
 import api from '@/services/api'
 
 const mealsStore = useMealsStore()
@@ -21,8 +22,10 @@ initialEnd.setDate(initialEnd.getDate() + 3)
 const rangeStart = ref(initialStart)
 const rangeEnd = ref(initialEnd)
 const selectedMeal = ref(null)
+const selectedDish = ref(null)
 const selectedDishHasRecipe = ref(false)
 const showDishSelector = ref(false)
+const showRecipeViewer = ref(false)
 const showCreateListDialog = ref(false)
 const showDeleteDialog = ref(false)
 const showCommittedMealSheet = ref(false)
@@ -281,24 +284,24 @@ async function editMeal(meal) {
     // Show special sheet for eating out meals
     showEatingOutMealSheet.value = true
   } else if (meal.status === 'committed' || meal.status === 'prepared') {
-    // Check if dish has a recipe URL
+    // Check if dish has a recipe or recipe URL
     selectedDishHasRecipe.value = false
     if (meal.dishId) {
       try {
         const dish = await dishesStore.fetchDish(meal.dishId)
-        selectedDishHasRecipe.value = !!(dish?.recipeUrl)
+        selectedDishHasRecipe.value = !!(dish?.recipe || dish?.recipeUrl)
       } catch (error) {
         // Ignore error, just leave as false
       }
     }
     showCommittedMealSheet.value = true
   } else {
-    // For planned meals, check if dish has a recipe URL
+    // For planned meals, check if dish has a recipe or recipe URL
     selectedDishHasRecipe.value = false
     if (meal.dishId) {
       try {
         const dish = await dishesStore.fetchDish(meal.dishId)
-        selectedDishHasRecipe.value = !!(dish?.recipeUrl)
+        selectedDishHasRecipe.value = !!(dish?.recipe || dish?.recipeUrl)
       } catch (error) {
         // Ignore error, just leave as false
       }
@@ -325,6 +328,7 @@ function openMoveMealDialog() {
   }
   showCommittedMealSheet.value = false
   showUncommittedMealSheet.value = false
+  showEatingOutMealSheet.value = false
   moveToDate.value = selectedMeal.value.date
   moveToSlot.value = selectedMeal.value.slotId
   showMoveMealDialog.value = true
@@ -352,14 +356,11 @@ async function showRecipe() {
 
   try {
     const dish = await dishesStore.fetchDish(selectedMeal.value.dishId)
-    if (dish?.recipeUrl) {
-      // Use location.href for better PWA compatibility
-      window.location.href = dish.recipeUrl
-      showCommittedMealSheet.value = false
-      showUncommittedMealSheet.value = false
-    } else {
-      appStore.showSnackbar('Kein Rezept-Link hinterlegt', 'warning')
-    }
+    selectedDish.value = dish
+    showCommittedMealSheet.value = false
+    showUncommittedMealSheet.value = false
+    showEatingOutMealSheet.value = false
+    showRecipeViewer.value = true
   } catch (error) {
     appStore.showSnackbar('Fehler beim Laden des Rezepts', 'error')
   }
@@ -695,6 +696,13 @@ onMounted(() => {
       @cancel="cancelEdit"
     />
 
+    <!-- Recipe Viewer -->
+    <RecipeViewer
+      v-model="showRecipeViewer"
+      :dish="selectedDish"
+      :servings="selectedMeal?.servings"
+    />
+
     <!-- Create Shopping List Dialog -->
     <v-dialog v-model="showCreateListDialog" max-width="500">
       <v-card>
@@ -778,6 +786,11 @@ onMounted(() => {
 
         <v-card-text class="pa-2">
           <v-list density="compact">
+            <v-list-item v-if="selectedMeal?.status !== 'prepared'" @click="openMoveMealDialog" prepend-icon="mdi-arrow-all">
+              <v-list-item-title>Mahlzeit verschieben</v-list-item-title>
+              <v-list-item-subtitle>Datum oder Slot ändern</v-list-item-subtitle>
+            </v-list-item>
+
             <v-list-item @click="openEditEatingOutDialog" prepend-icon="mdi-pencil">
               <v-list-item-title>Beschreibung ändern</v-list-item-title>
             </v-list-item>

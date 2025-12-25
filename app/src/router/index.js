@@ -24,19 +24,6 @@ const routes = [
     component: () => import('@/views/VerwaltungView.vue'),
     meta: { title: 'Verwaltung', icon: 'mdi-database-cog' }
   },
-  // Legacy redirects for old routes
-  {
-    path: '/gerichte',
-    redirect: '/verwaltung'
-  },
-  {
-    path: '/gerichte/:id',
-    redirect: '/verwaltung'
-  },
-  {
-    path: '/produkte',
-    redirect: '/verwaltung'
-  },
   {
     path: '/einstellungen',
     name: 'settings',

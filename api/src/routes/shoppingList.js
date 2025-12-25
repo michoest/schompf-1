@@ -348,7 +348,9 @@ router.post('/add-item', async (req, res) => {
       }
     }
 
-    const formatted = formatAmount(amount || 1, unit || product?.defaultUnit || 'Stück');
+    const finalAmount = amount !== null && amount !== undefined ? amount : null;
+    const finalUnit = unit || null;
+    const formatted = formatAmount(finalAmount, finalUnit);
 
     const item = {
       id: uuidv4(),
@@ -464,7 +466,9 @@ router.put('/item/:itemId', async (req, res) => {
       }
     }
 
-    const formatted = formatAmount(amount || 1, unit || product?.defaultUnit || 'Stück');
+    const finalAmount = amount !== null && amount !== undefined ? amount : null;
+    const finalUnit = unit || null;
+    const formatted = formatAmount(finalAmount, finalUnit);
 
     // Update item properties
     item.productId = product?.id || null;
