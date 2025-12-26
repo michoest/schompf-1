@@ -299,7 +299,7 @@ router.post('/generate', async (req, res) => {
       fromDate,
       toDate,
       shoppingDate: shoppingDate || null,
-      generatedAt: db.data.shoppingList.generatedAt,
+      generatedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       items,
       mealIds: meals.map(m => m.id) // IDs of uncommitted meals included in this update

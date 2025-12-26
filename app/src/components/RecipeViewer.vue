@@ -51,7 +51,15 @@ const scaledIngredients = computed(() => {
 
 function openRecipeUrl() {
   if (hasRecipeUrl.value) {
-    window.location.href = props.dish.recipeUrl
+    // In PWA mode (standalone), use window.location for in-app browser
+    // Otherwise, open in new tab
+    const isPWA = window.matchMedia('(display-mode: standalone)').matches
+
+    if (isPWA) {
+      window.location.href = props.dish.recipeUrl
+    } else {
+      window.open(props.dish.recipeUrl, '_blank')
+    }
   }
 }
 

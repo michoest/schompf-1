@@ -43,6 +43,9 @@ const listShoppingDate = ref(null)
 
 const windowWidth = ref(window.innerWidth)
 const isMobile = computed(() => windowWidth.value < 600)
+const publishedDishes = computed(() => {
+  return dishesStore.dishes.filter(d => d.published !== false)
+})
 const editingMealId = computed(() => {
   if (showUncommittedMealSheet.value && selectedMeal.value && !selectedMeal.value.isNew) {
     return selectedMeal.value.id
@@ -688,8 +691,8 @@ onMounted(() => {
     <!-- Dish Selector Dialog -->
     <DishSelector
       v-model="showDishSelector"
-      :dishes="dishesStore.dishes"
-      :initial-dish="selectedMeal?.dishId ? dishesStore.dishes.find(d => d.id === selectedMeal.dishId) : null"
+      :dishes="publishedDishes"
+      :initial-dish="selectedMeal?.dishId ? publishedDishes.find(d => d.id === selectedMeal.dishId) : null"
       :initial-servings="selectedMeal?.servings"
       :show-cancel="!selectedMeal?.isNew"
       @select="onDishSelected"

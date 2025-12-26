@@ -57,7 +57,8 @@ const dishForm = ref({
   recipeUrl: '',
   defaultServings: 2,
   categories: [],
-  ingredients: []
+  ingredients: [],
+  published: false
 })
 
 const availableCategories = [
@@ -467,7 +468,8 @@ function openDishDialog(dish = null) {
       recipeUrl: dish.recipeUrl || '',
       defaultServings: dish.defaultServings,
       categories: [...(dish.categories || [])],
-      ingredients: [...(dish.ingredients || [])]
+      ingredients: [...(dish.ingredients || [])],
+      published: dish.published ?? true
     }
   } else {
     editingDish.value = null
@@ -477,7 +479,8 @@ function openDishDialog(dish = null) {
       recipeUrl: '',
       defaultServings: 2,
       categories: [],
-      ingredients: []
+      ingredients: [],
+      published: false
     }
   }
   showDishDialog.value = true
@@ -873,6 +876,7 @@ onUnmounted(() => {
               </template>
 
               <template #append>
+                <v-icon v-if="dish.recipe" icon="mdi-book-open-variant" size="small" class="mr-2 text-medium-emphasis" />
                 <v-btn v-if="dish.recipeUrl" icon="mdi-open-in-new" variant="text" size="small" :href="dish.recipeUrl"
                   target="_blank" @click.stop />
                 <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click.stop="deleteDish(dish)" />
@@ -1066,6 +1070,15 @@ onUnmounted(() => {
                 rows="6"
                 auto-grow
                 prepend-inner-icon="mdi-book-open-variant"
+              />
+            </v-col>
+            <v-col cols="12">
+              <v-checkbox
+                v-model="dishForm.published"
+                label="Im Planer anzeigen"
+                hint="Wenn deaktiviert, wird das Gericht nicht im Planer zur Auswahl angezeigt"
+                persistent-hint
+                color="primary"
               />
             </v-col>
           </v-row>

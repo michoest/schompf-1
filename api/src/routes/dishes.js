@@ -42,7 +42,7 @@ router.get('/:id', async (req, res) => {
 // Create dish
 router.post('/', async (req, res) => {
   try {
-    const { name, recipe, recipeUrl, ingredients, defaultServings, type, subDishes, categories } = req.body;
+    const { name, recipe, recipeUrl, ingredients, defaultServings, type, subDishes, categories, published } = req.body;
     if (!name) {
       return res.status(400).json({ error: 'Name ist erforderlich' });
     }
@@ -73,6 +73,7 @@ router.post('/', async (req, res) => {
       type: type || 'dish', // 'dish', 'eating_out', 'placeholder'
       subDishes: validatedSubDishes,
       categories: categories || [],
+      published: published !== undefined ? published : false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -94,7 +95,7 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Gericht nicht gefunden' });
     }
     
-    const { name, recipe, recipeUrl, ingredients, defaultServings, type, subDishes, categories } = req.body;
+    const { name, recipe, recipeUrl, ingredients, defaultServings, type, subDishes, categories, published } = req.body;
 
     // Validate ingredients if provided
     let validatedIngredients = db.data.dishes[index].ingredients;
@@ -128,6 +129,7 @@ router.put('/:id', async (req, res) => {
       type: type ?? db.data.dishes[index].type,
       subDishes: validatedSubDishes,
       categories: categories !== undefined ? categories : (db.data.dishes[index].categories || []),
+      published: published !== undefined ? published : (db.data.dishes[index].published ?? true),
       updatedAt: new Date().toISOString()
     };
     

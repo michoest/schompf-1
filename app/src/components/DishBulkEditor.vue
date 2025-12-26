@@ -15,7 +15,8 @@ const search = ref('')
 const selectedDishes = ref([])
 const showBulkEditDialog = ref(false)
 const bulkEditData = ref({
-  categories: []
+  categories: [],
+  published: null
 })
 
 const availableCategories = [
@@ -61,7 +62,8 @@ function openBulkEdit() {
 
   // Reset bulk edit data
   bulkEditData.value = {
-    categories: []
+    categories: [],
+    published: null
   }
 
   showBulkEditDialog.value = true
@@ -76,8 +78,12 @@ async function applyBulkEdit() {
       updates.categories = bulkEditData.value.categories
     }
 
+    if (bulkEditData.value.published !== null) {
+      updates.published = bulkEditData.value.published
+    }
+
     if (Object.keys(updates).length === 0) {
-      appStore.showSnackbar('Bitte wählen Sie mindestens eine Kategorie', 'warning')
+      appStore.showSnackbar('Bitte wählen Sie mindestens ein Feld zum Aktualisieren', 'warning')
       return
     }
 
@@ -240,7 +246,7 @@ function close() {
       <v-card-title>{{ selectedCount }} Gerichte bearbeiten</v-card-title>
       <v-card-text>
         <p class="text-medium-emphasis mb-4">
-          Wählen Sie die Kategorien aus, die für alle ausgewählten Gerichte gesetzt werden sollen.
+          Wählen Sie die Felder aus, die für alle ausgewählten Gerichte aktualisiert werden sollen.
         </p>
 
         <v-select
@@ -251,6 +257,19 @@ function close() {
           chips
           closable-chips
           hint="Die ausgewählten Kategorien ersetzen die bestehenden Kategorien"
+          persistent-hint
+          class="mb-4"
+        />
+
+        <v-select
+          v-model="bulkEditData.published"
+          :items="[
+            { title: 'Nicht ändern', value: null },
+            { title: 'Im Planer anzeigen', value: true },
+            { title: 'Aus Planer ausblenden', value: false }
+          ]"
+          label="Sichtbarkeit im Planer"
+          hint="Legt fest, ob die Gerichte im Planer zur Auswahl stehen"
           persistent-hint
         />
       </v-card-text>

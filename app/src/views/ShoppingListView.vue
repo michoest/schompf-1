@@ -24,12 +24,11 @@ const showDeleteConfirmDialog = ref(false)
 const itemToDelete = ref(null)
 const showActionsMenu = ref(false)
 
-const showChangeCategoryDialog = ref(false)
-const itemToChangeCategory = ref(null)
-const newCategoryId = ref(null)
-
 const showCompleted = ref(false)
 const showFutureItems = ref(true)
+
+// Track items that are being checked (to delay their disappearance)
+const itemsBeingChecked = ref(new Set())
 
 // Add this watch
 watch(() => newItem.value.name, (name) => {
@@ -90,6 +89,9 @@ const filteredItems = computed(() => {
   if (!shoppingStore.shoppingList?.items) return []
 
   return shoppingStore.shoppingList.items.filter(item => {
+    // Keep items that are being checked visible for animation
+    if (itemsBeingChecked.value.has(item.id)) return true
+
     // Filter by completed status
     if (!showCompleted.value && item.checked) return false
 
@@ -165,8 +167,26 @@ const categoryOptions = computed(() => {
 })
 
 // Actions
-function toggleItem(item) {
-  shoppingStore.toggleItem(item.id)
+async function toggleItem(item) {
+  const wasChecked = item.checked
+
+  // If checking an item and we're hiding completed items, add delay
+  if (!wasChecked && !showCompleted.value) {
+    // Add to the set to keep it visible
+    itemsBeingChecked.value.add(item.id)
+
+    // Toggle the item state
+    await shoppingStore.toggleItem(item.id)
+
+    // Wait 500ms for the animation to play
+    setTimeout(() => {
+      // Remove from the set so it can be filtered out
+      itemsBeingChecked.value.delete(item.id)
+    }, 500)
+  } else {
+    // For unchecking or when showing completed, just toggle immediately
+    await shoppingStore.toggleItem(item.id)
+  }
 }
 
 function removeChecked() {
@@ -275,10 +295,14 @@ async function saveEditedItem() {
 
   try {
     const productName = editItem.value.name.trim()
+    const amount = editItem.value.amount !== null && editItem.value.amount !== '' && editItem.value.amount !== undefined
+      ? parseFloat(editItem.value.amount)
+      : null
+
     await api.updateShoppingItem(editItem.value.id, {
       productName: productName,
-      amount: parseFloat(editItem.value.amount) || 1,
-      unit: editItem.value.unit,
+      amount: amount,
+      unit: editItem.value.unit || null,
       categoryId: editItem.value.categoryId
     })
 
@@ -295,33 +319,6 @@ async function saveEditedItem() {
 function confirmDeleteItem(item) {
   itemToDelete.value = item
   showDeleteConfirmDialog.value = true
-}
-
-function openChangeCategoryDialog(item) {
-  itemToChangeCategory.value = item
-  newCategoryId.value = item.categoryId
-  showChangeCategoryDialog.value = true
-}
-
-async function changeItemCategory() {
-  if (!itemToChangeCategory.value) return
-
-  try {
-    const productName = itemToChangeCategory.value.productName
-    await api.updateShoppingItem(itemToChangeCategory.value.id, {
-      categoryId: newCategoryId.value
-    })
-
-    // Reload the list to get updated item with new category/vendor info
-    await shoppingStore.loadCurrentList()
-
-    showChangeCategoryDialog.value = false
-    itemToChangeCategory.value = null
-    newCategoryId.value = null
-    appStore.showSnackbar(`${productName} verschoben`)
-  } catch (error) {
-    appStore.showSnackbar('Fehler beim Verschieben', 'error')
-  }
 }
 
 async function deleteItem() {
@@ -472,7 +469,7 @@ async function clearAllItems() {
 
               <!-- Items in this category -->
               <v-list-item v-for="item in category.items" :key="item.id" :class="{ 'item-checked': item.checked }"
-                @click="toggleItem(item)">
+                @click="item.sources?.some(s => s.manual) ? openEditDialog(item) : null">
                 <template #prepend>
                   <v-checkbox-btn :model-value="item.checked" color="primary" @click.stop="toggleItem(item)" />
                 </template>
@@ -506,10 +503,6 @@ async function clearAllItems() {
                     <!-- Source info button -->
                     <v-btn v-if="item.sources?.length" icon="mdi-information-outline" variant="text" size="x-small"
                       @click.stop="showSources(item)" />
-
-                    <!-- Change category button (only for manually added items) -->
-                    <v-btn v-if="item.sources?.some(s => s.manual)" icon="mdi-folder-move" variant="text" size="x-small"
-                      @click.stop="openChangeCategoryDialog(item)" />
 
                     <!-- Edit button (only for manually added items) -->
                     <v-btn v-if="item.sources?.some(s => s.manual)" icon="mdi-pencil" variant="text" size="x-small"
@@ -676,41 +669,6 @@ async function clearAllItems() {
           <v-spacer />
           <v-btn variant="text" @click="showDeleteConfirmDialog = false">Abbrechen</v-btn>
           <v-btn color="error" @click="deleteItem">Löschen</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Change category dialog -->
-    <v-dialog v-model="showChangeCategoryDialog" max-width="400">
-      <v-card>
-        <v-card-title>Kategorie ändern</v-card-title>
-        <v-card-text>
-          <p class="text-medium-emphasis mb-4">
-            Verschiebe "{{ itemToChangeCategory?.productName }}" in eine andere Kategorie
-          </p>
-          <v-select v-model="newCategoryId" :items="categoryOptions" item-title="title" item-value="value"
-            label="Neue Kategorie">
-            <template #item="{ item, props }">
-              <v-list-item v-bind="props">
-                <template #prepend>
-                  <v-avatar :color="item.raw.vendorColor || '#9CA3AF'" size="24" class="mr-2">
-                    <v-icon icon="mdi-store" size="small" color="white" />
-                  </v-avatar>
-                </template>
-                <v-list-item-subtitle>{{ item.raw.subtitle }}</v-list-item-subtitle>
-              </v-list-item>
-            </template>
-            <template #selection="{ item }">
-              <v-chip :color="item.raw.vendorColor || '#9CA3AF'" size="small" label>
-                {{ item.raw.title }} ({{ item.raw.subtitle }})
-              </v-chip>
-            </template>
-          </v-select>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="showChangeCategoryDialog = false">Abbrechen</v-btn>
-          <v-btn color="primary" @click="changeItemCategory">Verschieben</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

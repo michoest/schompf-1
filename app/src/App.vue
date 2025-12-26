@@ -102,8 +102,8 @@ onUnmounted(() => {
     </v-navigation-drawer>
 
     <!-- Main Content -->
-    <v-main class="bg-background">
-      <v-container fluid class="pa-4" :class="{ 'pb-20': isMobile }">
+    <v-main class="bg-background" :class="{ 'main-mobile': isMobile }">
+      <v-container fluid class="pa-4" :class="{ 'container-mobile': isMobile }">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
             <component :is="Component" />
@@ -182,10 +182,16 @@ onUnmounted(() => {
   opacity: 0;
 }
 
-.pb-20 {
+/* Mobile-specific spacing */
+.main-mobile {
+  padding-top: env(safe-area-inset-top) !important;
+}
+
+.container-mobile {
   padding-bottom: calc(100px + env(safe-area-inset-bottom)) !important;
 }
 
+/* FAB spacing for mobile - used in individual views */
 .mb-16 {
   margin-bottom: calc(80px + env(safe-area-inset-bottom)) !important;
 }
