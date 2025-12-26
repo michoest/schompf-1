@@ -6,8 +6,11 @@ import { fileURLToPath, URL } from 'node:url'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  
+
   return {
+    define: {
+      __BUILD_TIME__: JSON.stringify(new Date().toISOString())
+    },
     plugins: [
       vue(),
       VitePWA({

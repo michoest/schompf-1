@@ -14,6 +14,7 @@ const selectedItem = ref(null)
 const showAddItemDialog = ref(false)
 const newItem = ref({ name: '', amount: null, unit: '', categoryId: null })
 const userSelectedCategory = ref(false)
+const addItemNameInput = ref(null)
 
 const showEditItemDialog = ref(false)
 const editItem = ref({ id: null, name: '', amount: 1, unit: 'Stück', categoryId: null })
@@ -55,6 +56,10 @@ watch(showAddItemDialog, (open) => {
   if (open) {
     newItem.value = { name: '', amount: null, unit: '', categoryId: null }
     userSelectedCategory.value = false
+    // Focus the input field after dialog opens (with small delay for mobile keyboards)
+    setTimeout(() => {
+      addItemNameInput.value?.focus()
+    }, 100)
   }
 })
 
@@ -131,11 +136,21 @@ const itemsByVendor = computed(() => {
 })
 
 const checkedCount = computed(() => {
-  return shoppingStore.shoppingList?.items?.filter(i => i.checked).length || 0
+  if (!shoppingStore.shoppingList?.items) return 0
+  return shoppingStore.shoppingList.items.filter(i => i.checked).length
 })
 
 const totalCount = computed(() => {
-  return shoppingStore.shoppingList?.items?.length || 0
+  if (!shoppingStore.shoppingList?.items) return 0
+  return shoppingStore.shoppingList.items.length
+})
+
+const visibleCheckedCount = computed(() => {
+  return filteredItems.value.filter(i => i.checked).length
+})
+
+const visibleTotalCount = computed(() => {
+  return filteredItems.value.length
 })
 
 const hasCheckedItems = computed(() => checkedCount.value > 0)
@@ -394,12 +409,12 @@ async function clearAllItems() {
     <v-card v-if="totalCount > 0" class="mb-4" variant="flat" color="surface">
       <v-card-text class="pa-3">
         <div class="d-flex align-center justify-space-between mb-2">
-          <span class="text-body-2">{{ checkedCount }} von {{ totalCount }} erledigt</span>
+          <span class="text-body-2">{{ visibleCheckedCount }} von {{ visibleTotalCount }} erledigt</span>
           <v-btn v-if="hasCheckedItems" variant="text" color="error" size="small" @click="removeChecked">
             Erledigte löschen
           </v-btn>
         </div>
-        <v-progress-linear :model-value="(checkedCount / totalCount) * 100" color="primary" height="8" rounded />
+        <v-progress-linear :model-value="visibleTotalCount > 0 ? (visibleCheckedCount / visibleTotalCount) * 100 : 0" color="primary" height="8" rounded />
       </v-card-text>
     </v-card>
 
@@ -548,7 +563,7 @@ async function clearAllItems() {
       <v-card>
         <v-card-title>Artikel hinzufügen</v-card-title>
         <v-card-text>
-          <v-text-field v-model="newItem.name" label="Produkt" autofocus class="mb-3" @keyup.enter="addManualItem" />
+          <v-text-field ref="addItemNameInput" v-model="newItem.name" label="Produkt" autofocus class="mb-3" @keyup.enter="addManualItem" />
           <v-row>
             <v-col cols="6">
               <v-text-field v-model.number="newItem.amount" label="Menge" type="number" inputmode="decimal" min="0" step="0.1" />

@@ -1,8 +1,24 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useAppStore } from '@/stores'
 
 const appStore = useAppStore()
+
+// Build time from vite
+const buildTime = computed(() => {
+  try {
+    const buildDate = new Date(__BUILD_TIME__)
+    return buildDate.toLocaleString('de-DE', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  } catch (e) {
+    return 'Unbekannt'
+  }
+})
 
 // Settings state (would normally be fetched from backend)
 const mealSlots = ref([
@@ -220,6 +236,9 @@ function resetToDefaults() {
       <v-card-text>
         <p class="text-body-2 mb-2">
           <strong>Version:</strong> 1.0.0 (MVP)
+        </p>
+        <p class="text-body-2 mb-2">
+          <strong>Build:</strong> {{ buildTime }}
         </p>
         <p class="text-body-2 text-medium-emphasis">
           Schompf hilft dir bei der Mahlzeitenplanung und erstellt automatisch

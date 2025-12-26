@@ -500,6 +500,7 @@ async function saveDish() {
       defaultServings: dishForm.value.defaultServings,
       categories: dishForm.value.categories,
       ingredients: dishForm.value.ingredients,
+      published: dishForm.value.published,
       type: 'dish'
     }
 

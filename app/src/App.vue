@@ -184,15 +184,18 @@ onUnmounted(() => {
 
 /* Mobile-specific spacing */
 .main-mobile {
-  padding-top: env(safe-area-inset-top) !important;
+  /* Add padding for app-bar height (Vuetify doesn't do this automatically on mobile) */
+  padding-top: 56px !important;
 }
 
 .container-mobile {
-  padding-bottom: calc(100px + env(safe-area-inset-bottom)) !important;
+  /* Bottom padding = bottom nav height + safe area */
+  padding-bottom: calc(56px + env(safe-area-inset-bottom)) !important;
 }
 
 /* FAB spacing for mobile - used in individual views */
 .mb-16 {
-  margin-bottom: calc(80px + env(safe-area-inset-bottom)) !important;
+  /* Position above bottom nav (bottom nav already handles safe-area-inset) */
+  margin-bottom: 80px !important;
 }
 </style>
