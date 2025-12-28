@@ -71,8 +71,8 @@ function close() {
 <template>
   <v-dialog v-model="show" fullscreen :scrim="false" transition="dialog-bottom-transition">
     <v-card>
-      <!-- Header -->
-      <v-toolbar color="primary" density="compact">
+      <!-- Header with safe area padding for PWA mode -->
+      <v-toolbar color="primary" density="compact" class="safe-area-top">
         <v-btn icon="mdi-close" @click="close" />
         <v-toolbar-title>{{ dish?.name || 'Rezept' }}</v-toolbar-title>
         <v-spacer />
@@ -152,6 +152,11 @@ function close() {
 </template>
 
 <style scoped>
+/* Safe area padding for PWA mode to avoid system status bar */
+.safe-area-top :deep(.v-toolbar__content) {
+  padding-top: env(safe-area-inset-top) !important;
+}
+
 .recipe-text {
   line-height: 1.8;
   font-size: 1rem;
