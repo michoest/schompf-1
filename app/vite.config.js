@@ -21,7 +21,7 @@ export default defineConfig(({ mode }) => {
           short_name: 'Schompf',
           description: 'Plane deine Mahlzeiten und erstelle Einkaufslisten',
           theme_color: '#0D9488',
-          background_color: '#F0FDFA',
+          background_color: '#FFFFFF',
           display: 'standalone',
           scope: '/',
           start_url: '/',

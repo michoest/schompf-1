@@ -859,14 +859,14 @@ onUnmounted(() => {
           <v-list v-if="filteredDishes.length > 0">
             <v-list-item v-for="dish in filteredDishes" :key="dish.id" @click="openDishDialog(dish)">
               <template #prepend>
-                <v-avatar color="primary" variant="tonal">
+                <v-avatar color="primary" variant="tonal" :class="{ 'opacity-50': !dish.published }">
                   <v-icon :icon="dish.type === 'eating_out' ? 'mdi-food-takeout-box' : 'mdi-food'" />
                 </v-avatar>
               </template>
 
               <template #default>
                 <div class="d-flex flex-wrap align-center ga-2 mb-1">
-                  <span class="text-body-1">{{ dish.name }}</span>
+                  <span class="text-body-1" :class="{ 'text-medium-emphasis': !dish.published }">{{ dish.name }}</span>
                   <v-chip v-for="cat in dish.categories" :key="cat" size="x-small" variant="tonal" color="primary">
                     {{ cat }}
                   </v-chip>
@@ -878,7 +878,7 @@ onUnmounted(() => {
 
               <template #append>
                 <v-icon v-if="dish.recipe" icon="mdi-book-open-variant" size="small" class="mr-2 text-medium-emphasis" />
-                <v-btn v-if="dish.recipeUrl" icon="mdi-open-in-new" variant="text" size="small" :href="dish.recipeUrl"
+                <v-btn v-if="dish.recipeUrl" icon="mdi-link-variant" variant="text" size="small" color="medium-emphasis" :href="dish.recipeUrl"
                   target="_blank" @click.stop />
                 <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click.stop="deleteDish(dish)" />
               </template>
@@ -1221,6 +1221,10 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.opacity-50 {
+  opacity: 0.5;
+}
+
 .json-input :deep(textarea) {
   font-family: 'Courier New', monospace;
   font-size: 0.875rem;

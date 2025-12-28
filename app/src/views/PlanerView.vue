@@ -179,7 +179,11 @@ function getEndOfWeek(monday) {
 }
 
 function formatDate(date) {
-  return date.toISOString().split('T')[0]
+  // Use local date components to avoid timezone shifts
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function formatDateDisplay(date) {
@@ -425,9 +429,43 @@ function deleteEatingOutMeal() {
   confirmDelete()
 }
 
+async function markEatingOutFinished() {
+  try {
+    const updatedMeal = await api.markMealPrepared(selectedMeal.value.id)
+    // Update meal in store
+    const index = mealsStore.meals.findIndex(m => m.id === selectedMeal.value.id)
+    if (index !== -1) {
+      mealsStore.meals[index] = updatedMeal
+    }
+    showEatingOutMealSheet.value = false
+    appStore.showSnackbar('Mahlzeit als gegessen markiert')
+  } catch (error) {
+    appStore.showSnackbar('Fehler beim Markieren', 'error')
+  }
+}
+
+async function resetEatingOutToPlanned() {
+  try {
+    // For eating out meals, reset to 'planned' (not 'committed')
+    const updatedMeal = await mealsStore.updateMeal(selectedMeal.value.id, { status: 'planned' })
+    showEatingOutMealSheet.value = false
+    appStore.showSnackbar('Mahlzeit als geplant markiert')
+  } catch (error) {
+    appStore.showSnackbar('Fehler beim Zurücksetzen', 'error')
+  }
+}
+
 function deleteMeal(meal) {
-  // Show warning for committed meals
-  if (meal.status === 'committed' || meal.status === 'prepared') {
+  // Check if this is an eating out meal (no dishId but has dishName)
+  const isEatingOut = !meal.dishId && meal.dishName
+
+  // For eating out meals, only warn if prepared (finished)
+  // For home-cooked meals, warn if committed or prepared
+  const shouldWarn = isEatingOut
+    ? meal.status === 'prepared'
+    : (meal.status === 'committed' || meal.status === 'prepared')
+
+  if (shouldWarn) {
     mealToDelete.value = meal
     showDeleteDialog.value = true
   } else {
@@ -794,8 +832,16 @@ onMounted(() => {
               <v-list-item-subtitle>Datum oder Slot ändern</v-list-item-subtitle>
             </v-list-item>
 
-            <v-list-item @click="openEditEatingOutDialog" prepend-icon="mdi-pencil">
+            <v-list-item v-if="selectedMeal?.status !== 'prepared'" @click="openEditEatingOutDialog" prepend-icon="mdi-pencil">
               <v-list-item-title>Beschreibung ändern</v-list-item-title>
+            </v-list-item>
+
+            <v-list-item v-if="selectedMeal?.status !== 'prepared'" @click="markEatingOutFinished" prepend-icon="mdi-check">
+              <v-list-item-title>Als gegessen markieren</v-list-item-title>
+            </v-list-item>
+
+            <v-list-item v-if="selectedMeal?.status === 'prepared'" @click="resetEatingOutToPlanned" prepend-icon="mdi-undo-variant">
+              <v-list-item-title>Als geplant markieren</v-list-item-title>
             </v-list-item>
 
             <v-divider class="my-2" />
@@ -977,11 +1023,11 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Sticky navigation */
+/* Sticky navigation (desktop - normal flow) */
 .sticky-nav {
-  position: sticky;
-  top: calc(64px + env(safe-area-inset-top));
+  position: relative;
   z-index: 10;
+  background: rgb(var(--v-theme-background));
 }
 
 /* Desktop Grid */
@@ -1090,10 +1136,19 @@ onMounted(() => {
   }
 }
 
-/* Mobile sticky nav adjustment */
-@media (max-width: 599px) {
+/* Mobile: fixed header */
+@media (max-width: 959px) {
+  .planer-view {
+    /* Add padding to account for fixed header height */
+    padding-top: 100px;
+  }
+
   .sticky-nav {
-    top: 56px;
+    position: fixed;
+    top: calc(56px + env(safe-area-inset-top) + 16px);
+    left: 0;
+    right: 0;
+    padding: 0 16px;
   }
 
   .sticky-nav .v-card-text {

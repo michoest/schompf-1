@@ -56,10 +56,15 @@ watch(showAddItemDialog, (open) => {
   if (open) {
     newItem.value = { name: '', amount: null, unit: '', categoryId: null }
     userSelectedCategory.value = false
-    // Focus the input field after dialog opens (with small delay for mobile keyboards)
+    // Focus the input field after dialog opens (with longer delay for mobile keyboards)
     setTimeout(() => {
-      addItemNameInput.value?.focus()
-    }, 100)
+      if (addItemNameInput.value) {
+        const input = addItemNameInput.value
+        input.focus()
+        // Trigger click to activate mobile keyboard
+        input.$el?.querySelector('input')?.click()
+      }
+    }, 300)
   }
 })
 
@@ -145,12 +150,23 @@ const totalCount = computed(() => {
   return shoppingStore.shoppingList.items.length
 })
 
+// Items that should be counted (respects future items filter, but not checked filter)
+const countableItems = computed(() => {
+  if (!shoppingStore.shoppingList?.items) return []
+
+  return shoppingStore.shoppingList.items.filter(item => {
+    // Filter by future items (items with 'wait' status)
+    if (!showFutureItems.value && item.freshnessStatus === 'wait') return false
+    return true
+  })
+})
+
 const visibleCheckedCount = computed(() => {
-  return filteredItems.value.filter(i => i.checked).length
+  return countableItems.value.filter(i => i.checked).length
 })
 
 const visibleTotalCount = computed(() => {
-  return filteredItems.value.length
+  return countableItems.value.length
 })
 
 const hasCheckedItems = computed(() => checkedCount.value > 0)
@@ -406,7 +422,7 @@ async function clearAllItems() {
     </v-card>
 
     <!-- Progress indicator -->
-    <v-card v-if="totalCount > 0" class="mb-4" variant="flat" color="surface">
+    <v-card v-if="visibleTotalCount > 0" class="mb-4" variant="flat" color="surface">
       <v-card-text class="pa-3">
         <div class="d-flex align-center justify-space-between mb-2">
           <span class="text-body-2">{{ visibleCheckedCount }} von {{ visibleTotalCount }} erledigt</span>
@@ -414,7 +430,7 @@ async function clearAllItems() {
             Erledigte löschen
           </v-btn>
         </div>
-        <v-progress-linear :model-value="visibleTotalCount > 0 ? (visibleCheckedCount / visibleTotalCount) * 100 : 0" color="primary" height="8" rounded />
+        <v-progress-linear :model-value="(visibleCheckedCount / visibleTotalCount) * 100" color="primary" bg-color="surface-variant" height="8" rounded />
       </v-card-text>
     </v-card>
 

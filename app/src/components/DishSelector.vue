@@ -224,6 +224,7 @@ watch(() => props.modelValue, (val) => {
           v-model="eatingOutDescription"
           label="Beschreibung"
           autofocus
+          clearable
           @keyup.enter="confirmEatingOut"
         />
       </v-card-text>

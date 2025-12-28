@@ -184,18 +184,20 @@ onUnmounted(() => {
 
 /* Mobile-specific spacing */
 .main-mobile {
-  /* Add padding for app-bar height (Vuetify doesn't do this automatically on mobile) */
-  padding-top: 56px !important;
+  /* Add padding for app-bar height + safe area at top */
+  padding-top: calc(56px + env(safe-area-inset-top)) !important;
 }
 
 .container-mobile {
+  /* Remove top padding on mobile - sticky elements handle their own spacing */
+  padding-top: 0 !important;
   /* Bottom padding = bottom nav height + safe area */
   padding-bottom: calc(56px + env(safe-area-inset-bottom)) !important;
 }
 
 /* FAB spacing for mobile - used in individual views */
-.mb-16 {
-  /* Position above bottom nav (bottom nav already handles safe-area-inset) */
-  margin-bottom: 80px !important;
+.v-btn.mb-16 {
+  /* Position above bottom nav: base height (56px) + safe area + extra spacing (32px) */
+  margin-bottom: calc(88px + env(safe-area-inset-bottom)) !important;
 }
 </style>

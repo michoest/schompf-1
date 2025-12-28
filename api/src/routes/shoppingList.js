@@ -4,6 +4,28 @@ import db from '../services/database.js';
 
 const router = Router();
 
+/**
+ * Helper to format date as YYYY-MM-DD without timezone shifts
+ * @param {Date} date - Date object to format
+ * @returns {string} Date string in YYYY-MM-DD format
+ */
+function formatDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Helper to parse YYYY-MM-DD date string as local date
+ * @param {string} dateStr - Date string in YYYY-MM-DD format
+ * @returns {Date} Date object at local midnight
+ */
+function parseLocalDate(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 // Get current shopping list
 router.get('/current', async (req, res) => {
   try {
@@ -147,8 +169,9 @@ router.post('/generate', async (req, res) => {
       
       const dish = db.data.dishes.find(d => d.id === meal.dishId);
       if (!dish || dish.type === 'eating_out') continue;
-      
-      const servingsMultiplier = meal.servings / dish.defaultServings;
+
+      // Ingredient amounts are per serving, so multiply by number of servings
+      const servingsMultiplier = meal.servings;
       const ingredients = collectIngredients(meal.dishId, servingsMultiplier, db);
       
       for (const ing of ingredients) {
@@ -233,15 +256,15 @@ router.post('/generate', async (req, res) => {
 
         // Calculate days from shopping date to earliest use
         const daysUntilUse = shoppingDate
-          ? Math.ceil((new Date(earliestUseDate) - new Date(shoppingDate)) / (1000 * 60 * 60 * 24))
+          ? Math.ceil((parseLocalDate(earliestUseDate) - parseLocalDate(shoppingDate)) / (1000 * 60 * 60 * 24))
           : null;
 
         // Calculate earliest purchase date: earliest use date minus freshness days
         let earliestPurchaseDate = null;
         if (earliestUseDate && data.freshnessDays !== null) {
-          const purchaseDate = new Date(earliestUseDate);
+          const purchaseDate = parseLocalDate(earliestUseDate);
           purchaseDate.setDate(purchaseDate.getDate() - data.freshnessDays);
-          earliestPurchaseDate = purchaseDate.toISOString().split('T')[0];
+          earliestPurchaseDate = formatDate(purchaseDate);
         }
 
         // Determine freshness status based on shopping date
