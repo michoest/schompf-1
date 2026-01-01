@@ -62,7 +62,7 @@ router.get('/date/:date', async (req, res) => {
 // Create meal
 router.post('/', async (req, res) => {
   try {
-    const { date, slotId, slotName, slotOrder, dishId, dishName, servings, notes } = req.body;
+    const { date, slotId, slotName, slotOrder, dishId, dishName, servings, notes, subDishes } = req.body;
     if (!date) {
       return res.status(400).json({ error: 'Datum ist erforderlich' });
     }
@@ -79,6 +79,13 @@ router.post('/', async (req, res) => {
     // Determine slot info
     const slot = db.data.settings.mealSlots.find(s => s.id === slotId);
 
+    // Validate subdishes if provided
+    const validatedSubDishes = (subDishes || []).map(sub => ({
+      dishId: sub.dishId,
+      scalingFactor: sub.scalingFactor || 1,
+      optional: sub.optional || false
+    }));
+
     const meal = {
       id: uuidv4(),
       date, // Format: YYYY-MM-DD
@@ -89,11 +96,12 @@ router.post('/', async (req, res) => {
       dishName: dishName || dish?.name || null,
       servings: servings || dish?.defaultServings || db.data.settings.defaultServings,
       notes: notes || null,
+      subDishes: validatedSubDishes,
       status: 'planned', // planned | committed | prepared
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    
+
     db.data.meals.push(meal);
     await db.write();
     res.status(201).json(meal);
@@ -111,7 +119,7 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Mahlzeit nicht gefunden' });
     }
 
-    const { date, slotId, slotName, slotOrder, dishId, dishName, servings, notes, status } = req.body;
+    const { date, slotId, slotName, slotOrder, dishId, dishName, servings, notes, status, subDishes } = req.body;
 
     // Verify dish exists if changing
     let dish = null;
@@ -126,6 +134,16 @@ router.put('/:id', async (req, res) => {
       dish = db.data.dishes.find(d => d.id === db.data.meals[index].dishId);
     }
 
+    // Validate subdishes if provided
+    let validatedSubDishes = db.data.meals[index].subDishes || [];
+    if (subDishes !== undefined) {
+      validatedSubDishes = subDishes.map(sub => ({
+        dishId: sub.dishId,
+        scalingFactor: sub.scalingFactor || 1,
+        optional: sub.optional || false
+      }));
+    }
+
     db.data.meals[index] = {
       ...db.data.meals[index],
       date: date ?? db.data.meals[index].date,
@@ -136,10 +154,11 @@ router.put('/:id', async (req, res) => {
       dishName: dishName !== undefined ? dishName : (dishId !== undefined ? (dish?.name || null) : db.data.meals[index].dishName),
       servings: servings ?? db.data.meals[index].servings,
       notes: notes !== undefined ? notes : db.data.meals[index].notes,
+      subDishes: validatedSubDishes,
       status: status !== undefined ? status : (db.data.meals[index].status || db.data.meals[index].committed ? 'committed' : 'planned'),
       updatedAt: new Date().toISOString()
     };
-    
+
     await db.write();
     res.json(db.data.meals[index]);
   } catch (error) {

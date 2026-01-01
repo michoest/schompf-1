@@ -60,7 +60,8 @@ router.post('/', async (req, res) => {
     // Validate sub-dishes if provided
     const validatedSubDishes = (subDishes || []).map(sub => ({
       dishId: sub.dishId,
-      multiplier: sub.multiplier || 1
+      scalingFactor: sub.scalingFactor || sub.multiplier || 1,
+      optional: sub.optional || false
     }));
 
     const dish = {
@@ -115,7 +116,8 @@ router.put('/:id', async (req, res) => {
     if (subDishes !== undefined) {
       validatedSubDishes = subDishes.map(sub => ({
         dishId: sub.dishId,
-        multiplier: sub.multiplier || 1
+        scalingFactor: sub.scalingFactor || sub.multiplier || 1,
+        optional: sub.optional || false
       }));
     }
 

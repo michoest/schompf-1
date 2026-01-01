@@ -373,7 +373,7 @@ async function showRecipe() {
   }
 }
 
-async function onDishSelected({ dish, servings }) {
+async function onDishSelected({ dish, servings, subDishes }) {
   try {
     if (selectedMeal.value.isNew) {
       await mealsStore.createMeal({
@@ -382,14 +382,16 @@ async function onDishSelected({ dish, servings }) {
         slotName: selectedMeal.value.slotName,
         dishId: dish?.id || null,
         dishName: dish?.type === 'eating_out' ? dish.name : undefined,
-        servings: servings || 2
+        servings: servings || 2,
+        subDishes: subDishes || []
       })
       appStore.showSnackbar('Mahlzeit hinzugefügt')
     } else {
       await mealsStore.updateMeal(selectedMeal.value.id, {
         dishId: dish?.id || null,
         dishName: dish?.type === 'eating_out' ? dish.name : undefined,
-        servings: servings || selectedMeal.value.servings
+        servings: servings || selectedMeal.value.servings,
+        subDishes: subDishes || []
       })
       appStore.showSnackbar('Mahlzeit aktualisiert')
     }
@@ -742,11 +744,13 @@ onMounted(() => {
       v-model="showRecipeViewer"
       :dish="selectedDish"
       :servings="selectedMeal?.servings"
+      :sub-dishes="selectedMeal?.subDishes || []"
+      :all-dishes="dishesStore.dishes"
     />
 
     <!-- Create Shopping List Dialog -->
     <v-dialog v-model="showCreateListDialog" max-width="500">
-      <v-card>
+      <v-card @keydown.esc="showCreateListDialog = false" @keydown.enter="createShoppingList">
         <v-card-title>Einkaufsliste erstellen</v-card-title>
         <v-card-text>
           <p class="mb-3">
@@ -795,7 +799,7 @@ onMounted(() => {
 
     <!-- Delete Committed Meal Warning Dialog -->
     <v-dialog v-model="showDeleteDialog" max-width="500">
-      <v-card>
+      <v-card @keydown.esc="showDeleteDialog = false" @keydown.enter="confirmDelete">
         <v-card-title>Mahlzeit löschen?</v-card-title>
         <v-card-text>
           <p class="mb-3">
@@ -856,14 +860,13 @@ onMounted(() => {
 
     <!-- Edit eating out description dialog -->
     <v-dialog v-model="showEditEatingOutDialog" max-width="400">
-      <v-card>
+      <v-card @keydown.esc="showEditEatingOutDialog = false" @keydown.enter="saveEatingOutDescription">
         <v-card-title>Beschreibung ändern</v-card-title>
         <v-card-text>
           <v-text-field
             v-model="editingEatingOutDescription"
             label="Beschreibung"
             autofocus
-            @keyup.enter="saveEatingOutDescription"
           />
         </v-card-text>
         <v-card-actions>
@@ -972,7 +975,7 @@ onMounted(() => {
 
     <!-- Move meal dialog -->
     <v-dialog v-model="showMoveMealDialog" max-width="400">
-      <v-card>
+      <v-card @keydown.esc="showMoveMealDialog = false" @keydown.enter="confirmMoveMeal">
         <v-card-title>Mahlzeit verschieben</v-card-title>
         <v-card-text>
           <v-text-field
@@ -1028,6 +1031,9 @@ onMounted(() => {
   position: relative;
   z-index: 10;
   background: rgb(var(--v-theme-background));
+  margin-left: 8px;
+  margin-right: 8px;
+  border-radius: 8px;
 }
 
 /* Desktop Grid */

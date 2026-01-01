@@ -99,12 +99,12 @@ function formatAmount(amount, unit) {
 function collectIngredients(dishId, servingsMultiplier, db, visited = new Set()) {
   if (visited.has(dishId)) return []; // Prevent circular references
   visited.add(dishId);
-  
+
   const dish = db.data.dishes.find(d => d.id === dishId);
   if (!dish) return [];
-  
+
   const ingredients = [];
-  
+
   // Add direct ingredients (including optional ones)
   for (const ing of dish.ingredients) {
     ingredients.push({
@@ -112,21 +112,49 @@ function collectIngredients(dishId, servingsMultiplier, db, visited = new Set())
       productName: ing.productName,
       amount: ing.amount * servingsMultiplier,
       unit: ing.unit,
-      optional: ing.optional || false
+      optional: ing.optional || false,
+      sourceDishId: dishId,
+      sourceDishName: dish.name
     });
   }
-  
+
   // Add ingredients from sub-dishes
   for (const subDish of (dish.subDishes || [])) {
     const subIngredients = collectIngredients(
       subDish.dishId,
-      servingsMultiplier * subDish.multiplier,
+      servingsMultiplier * (subDish.scalingFactor || subDish.multiplier || 1),
       db,
       visited
     );
     ingredients.push(...subIngredients);
   }
-  
+
+  return ingredients;
+}
+
+/**
+ * Collect ingredients from a meal, including selected subdishes
+ */
+function collectMealIngredients(meal, db) {
+  const ingredients = [];
+
+  // Collect from main dish
+  const mainIngredients = collectIngredients(meal.dishId, meal.servings, db);
+  ingredients.push(...mainIngredients);
+
+  // Collect from meal's selected subdishes (if any)
+  if (meal.subDishes && meal.subDishes.length > 0) {
+    for (const subDish of meal.subDishes) {
+      const subIngredients = collectIngredients(
+        subDish.dishId,
+        meal.servings * (subDish.scalingFactor || 1),
+        db,
+        new Set([meal.dishId]) // Prevent main dish from being included again
+      );
+      ingredients.push(...subIngredients);
+    }
+  }
+
   return ingredients;
 }
 
@@ -166,18 +194,17 @@ router.post('/generate', async (req, res) => {
     
     for (const meal of meals) {
       if (!meal.dishId) continue;
-      
+
       const dish = db.data.dishes.find(d => d.id === meal.dishId);
       if (!dish || dish.type === 'eating_out') continue;
 
-      // Ingredient amounts are per serving, so multiply by number of servings
-      const servingsMultiplier = meal.servings;
-      const ingredients = collectIngredients(meal.dishId, servingsMultiplier, db);
-      
+      // Collect ingredients from main dish and selected subdishes
+      const ingredients = collectMealIngredients(meal, db);
+
       for (const ing of ingredients) {
         const key = `${ing.productId || ing.productName}-${ing.unit}`;
         const normalized = normalizeUnit(ing.amount, ing.unit);
-        
+
         if (!ingredientMap.has(key)) {
           // Find product for category info
           const product = ing.productId ? db.data.products.find(p => p.id === ing.productId) : null;
@@ -206,6 +233,8 @@ router.post('/generate', async (req, res) => {
           mealSlot: meal.slotName,
           dishId: meal.dishId,
           dishName: meal.dishName,
+          sourceDishId: ing.sourceDishId,
+          sourceDishName: ing.sourceDishName,
           amount: ing.amount,
           unit: ing.unit,
           optional: ing.optional || false
