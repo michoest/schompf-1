@@ -58,6 +58,7 @@ const dishForm = ref({
   defaultServings: 2,
   categories: [],
   ingredients: [],
+  subDishes: [],
   published: false
 })
 
@@ -79,8 +80,17 @@ const editingIngredient = ref(null)
 const ingredientForm = ref({
   productId: null,
   productName: '',
-  amount: 1,
-  unit: '',
+  amount: null,
+  unit: null,
+  optional: false
+})
+
+// SubDish form
+const showSubDishDialog = ref(false)
+const editingSubDish = ref(null)
+const subDishForm = ref({
+  dishId: null,
+  scalingFactor: 1,
   optional: false
 })
 
@@ -254,6 +264,24 @@ const productOptions = computed(() => {
     }
   })
 })
+
+const dishOptions = computed(() => {
+  return dishesStore.dishes
+    .filter(d => d.type === 'dish') // Only actual dishes, not eating_out or placeholder
+    .filter(d => !editingDish.value || d.id !== editingDish.value.id) // Exclude current dish to prevent self-reference
+    .map(d => ({
+      value: d.id,
+      title: d.name,
+      subtitle: d.categories && d.categories.length > 0 ? d.categories.join(', ') : 'Keine Kategorien'
+    }))
+    .sort((a, b) => a.title.localeCompare(b.title))
+})
+
+// Helper to get dish name by ID
+function getDishName(dishId) {
+  const dish = dishesStore.dishes.find(d => d.id === dishId)
+  return dish?.name || 'Unbekanntes Gericht'
+}
 
 // Auto-suggest unit based on selected product
 watch(() => ingredientForm.value.productId, (productId) => {
@@ -469,6 +497,7 @@ function openDishDialog(dish = null) {
       defaultServings: dish.defaultServings,
       categories: [...(dish.categories || [])],
       ingredients: [...(dish.ingredients || [])],
+      subDishes: [...(dish.subDishes || [])],
       published: dish.published ?? true
     }
   } else {
@@ -480,6 +509,7 @@ function openDishDialog(dish = null) {
       defaultServings: 2,
       categories: [],
       ingredients: [],
+      subDishes: [],
       published: false
     }
   }
@@ -500,6 +530,7 @@ async function saveDish() {
       defaultServings: dishForm.value.defaultServings,
       categories: dishForm.value.categories,
       ingredients: dishForm.value.ingredients,
+      subDishes: dishForm.value.subDishes,
       published: dishForm.value.published,
       type: 'dish'
     }
@@ -539,8 +570,8 @@ function openIngredientDialog(ingredient = null) {
     ingredientForm.value = {
       productId: null,
       productName: '',
-      amount: 1,
-      unit: '',
+      amount: null,
+      unit: null,
       optional: false
     }
   }
@@ -554,7 +585,9 @@ function saveIngredient() {
   }
 
   // Handle undefined amounts: both amount and unit can be null
-  let amount = parseFloat(ingredientForm.value.amount)
+  // Accept both comma and dot as decimal separator
+  const amountStr = ingredientForm.value.amount ? String(ingredientForm.value.amount).replace(',', '.') : ''
+  let amount = amountStr ? parseFloat(amountStr) : null
   let unit = ingredientForm.value.unit
 
   // If amount is empty/null/0 and unit is empty, treat as undefined amount
@@ -586,6 +619,61 @@ function saveIngredient() {
 
 function deleteIngredient(ingredient) {
   dishForm.value.ingredients = dishForm.value.ingredients.filter(i => i.id !== ingredient.id)
+}
+
+// SubDish actions
+function openSubDishDialog(subDish = null) {
+  if (subDish) {
+    editingSubDish.value = subDish
+    subDishForm.value = { ...subDish }
+  } else {
+    editingSubDish.value = null
+    subDishForm.value = {
+      dishId: null,
+      scalingFactor: 1,
+      optional: false
+    }
+  }
+  showSubDishDialog.value = true
+}
+
+function saveSubDish() {
+  if (!subDishForm.value.dishId) {
+    appStore.showSnackbar('Gericht ist erforderlich', 'error')
+    return
+  }
+
+  // Prevent circular references (dish cannot be its own subdish)
+  if (editingDish.value && subDishForm.value.dishId === editingDish.value.id) {
+    appStore.showSnackbar('Ein Gericht kann nicht sich selbst als Untergericht enthalten', 'error')
+    return
+  }
+
+  // Parse scaling factor
+  const scalingFactorStr = subDishForm.value.scalingFactor ? String(subDishForm.value.scalingFactor).replace(',', '.') : '1'
+  const scalingFactor = parseFloat(scalingFactorStr) || 1
+
+  const subDish = {
+    id: editingSubDish.value?.id || crypto.randomUUID(),
+    dishId: subDishForm.value.dishId,
+    scalingFactor: scalingFactor,
+    optional: subDishForm.value.optional
+  }
+
+  if (editingSubDish.value) {
+    const idx = dishForm.value.subDishes.findIndex(s => s.id === editingSubDish.value.id)
+    if (idx !== -1) {
+      dishForm.value.subDishes[idx] = subDish
+    }
+  } else {
+    dishForm.value.subDishes.push(subDish)
+  }
+
+  showSubDishDialog.value = false
+}
+
+function deleteSubDish(subDish) {
+  dishForm.value.subDishes = dishForm.value.subDishes.filter(s => s.id !== subDish.id)
 }
 
 // JSON import
@@ -958,7 +1046,7 @@ onUnmounted(() => {
 
     <!-- Vendor Dialog -->
     <v-dialog v-model="showVendorDialog" max-width="400">
-      <v-card>
+      <v-card @keydown.esc="showVendorDialog = false" @keydown.enter="saveVendor">
         <v-card-title>
           {{ editingVendor ? 'Händler bearbeiten' : 'Neuer Händler' }}
         </v-card-title>
@@ -983,7 +1071,7 @@ onUnmounted(() => {
 
     <!-- Category Dialog -->
     <v-dialog v-model="showCategoryDialog" max-width="400">
-      <v-card>
+      <v-card @keydown.esc="showCategoryDialog = false" @keydown.enter="saveCategory">
         <v-card-title>
           {{ editingCategory ? 'Kategorie bearbeiten' : 'Neue Kategorie' }}
         </v-card-title>
@@ -1002,7 +1090,7 @@ onUnmounted(() => {
 
     <!-- Product Dialog -->
     <v-dialog v-model="showProductDialog" max-width="500">
-      <v-card>
+      <v-card @keydown.esc="showProductDialog = false" @keydown.enter="saveProduct">
         <v-card-title>
           {{ editingProduct ? 'Produkt bearbeiten' : 'Neues Produkt' }}
         </v-card-title>
@@ -1030,7 +1118,7 @@ onUnmounted(() => {
 
     <!-- Dish Dialog -->
     <v-dialog v-model="showDishDialog" max-width="700" scrollable>
-      <v-card>
+      <v-card @keydown.esc="showDishDialog = false" @keydown.enter="saveDish">
         <v-card-title>
           {{ editingDish ? 'Gericht bearbeiten' : 'Neues Gericht' }}
         </v-card-title>
@@ -1120,6 +1208,39 @@ onUnmounted(() => {
           <v-alert v-else type="info" variant="tonal" class="mt-2">
             Noch keine Zutaten hinzugefügt
           </v-alert>
+
+          <!-- SubDishes -->
+          <v-divider class="my-4" />
+          <div class="d-flex align-center justify-space-between mb-3">
+            <div class="text-subtitle-2">
+              Untergerichte ({{ dishForm.subDishes.length }})
+            </div>
+            <v-btn variant="tonal" color="primary" size="small" @click="openSubDishDialog()">
+              <v-icon start icon="mdi-plus" />
+              Untergericht hinzufügen
+            </v-btn>
+          </div>
+
+          <v-list v-if="dishForm.subDishes.length > 0" density="compact">
+            <v-list-item v-for="sub in dishForm.subDishes" :key="sub.id" :title="getDishName(sub.dishId)">
+              <template #subtitle>
+                Faktor: {{ sub.scalingFactor }}{{ sub.optional ? ' (optional)' : '' }}
+              </template>
+
+              <template #prepend>
+                <v-icon icon="mdi-food" />
+              </template>
+
+              <template #append>
+                <v-btn icon="mdi-pencil" variant="text" size="small" @click="openSubDishDialog(sub)" />
+                <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click="deleteSubDish(sub)" />
+              </template>
+            </v-list-item>
+          </v-list>
+
+          <v-alert v-else type="info" variant="tonal" class="mt-2">
+            Keine Untergerichte hinzugefügt
+          </v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -1131,7 +1252,7 @@ onUnmounted(() => {
 
     <!-- Ingredient Dialog -->
     <v-dialog v-model="showIngredientDialog" max-width="500">
-      <v-card>
+      <v-card @keydown.esc="showIngredientDialog = false" @keydown.enter="saveIngredient">
         <v-card-title>
           {{ editingIngredient ? 'Zutat bearbeiten' : 'Zutat hinzufügen' }}
         </v-card-title>
@@ -1152,8 +1273,8 @@ onUnmounted(() => {
 
           <v-row>
             <v-col cols="6">
-              <v-text-field v-model.number="ingredientForm.amount" label="Menge pro Portion" type="number"
-                inputmode="decimal" min="0" step="0.1" />
+              <v-text-field v-model="ingredientForm.amount" label="Menge pro Portion" type="text"
+                inputmode="decimal" />
             </v-col>
             <v-col cols="6">
               <v-combobox v-model="ingredientForm.unit" :items="commonUnits" label="Einheit" />
@@ -1174,9 +1295,61 @@ onUnmounted(() => {
       </v-card>
     </v-dialog>
 
+    <!-- SubDish Dialog -->
+    <v-dialog v-model="showSubDishDialog" max-width="500">
+      <v-card @keydown.esc="showSubDishDialog = false" @keydown.enter="saveSubDish">
+        <v-card-title>
+          {{ editingSubDish ? 'Untergericht bearbeiten' : 'Untergericht hinzufügen' }}
+        </v-card-title>
+        <v-card-text>
+          <!-- Dish selection -->
+          <v-autocomplete
+            v-model="subDishForm.dishId"
+            :items="dishOptions"
+            item-title="title"
+            item-value="value"
+            label="Gericht auswählen"
+            autofocus
+            class="mb-3"
+          >
+            <template #item="{ item, props }">
+              <v-list-item v-bind="props">
+                <v-list-item-subtitle>{{ item.raw.subtitle }}</v-list-item-subtitle>
+              </v-list-item>
+            </template>
+          </v-autocomplete>
+
+          <v-row>
+            <v-col cols="6">
+              <v-text-field
+                v-model="subDishForm.scalingFactor"
+                label="Skalierungsfaktor"
+                type="text"
+                inputmode="decimal"
+                hint="z.B. 0.5 für halbe Menge, 2 für doppelte Menge"
+                persistent-hint
+              />
+            </v-col>
+            <v-col cols="6" class="d-flex align-center">
+              <v-checkbox v-model="subDishForm.optional" label="Optional" hide-details />
+            </v-col>
+          </v-row>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showSubDishDialog = false">
+            Abbrechen
+          </v-btn>
+          <v-btn color="primary" @click="saveSubDish">
+            {{ editingSubDish ? 'Speichern' : 'Hinzufügen' }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- JSON Import Dialog -->
     <v-dialog v-model="showJsonImportDialog" max-width="800" scrollable>
-      <v-card>
+      <v-card @keydown.esc="showJsonImportDialog = false" @keydown.ctrl.enter="importFromJson">
         <v-card-title>Gericht aus JSON importieren</v-card-title>
         <v-card-text>
           <v-alert type="info" variant="tonal" class="mb-4">

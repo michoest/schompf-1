@@ -56,15 +56,24 @@ watch(showAddItemDialog, (open) => {
   if (open) {
     newItem.value = { name: '', amount: null, unit: '', categoryId: null }
     userSelectedCategory.value = false
-    // Focus the input field after dialog opens (with longer delay for mobile keyboards)
+    // Focus the input field after dialog opens with multiple attempts for mobile reliability
     setTimeout(() => {
       if (addItemNameInput.value) {
-        const input = addItemNameInput.value
-        input.focus()
-        // Trigger click to activate mobile keyboard
-        input.$el?.querySelector('input')?.click()
+        const component = addItemNameInput.value
+        const inputEl = component.$el?.querySelector('input')
+
+        if (inputEl) {
+          // Try multiple approaches to ensure focus works on mobile
+          inputEl.focus()
+          inputEl.click()
+
+          // Additional attempt after a short delay
+          setTimeout(() => {
+            inputEl.focus()
+          }, 100)
+        }
       }
-    }, 300)
+    }, 350)
   }
 })
 
@@ -232,7 +241,9 @@ async function addManualItem() {
   }
 
   try {
-    const amount = newItem.value.amount ? parseFloat(newItem.value.amount) : null
+    // Accept both comma and dot as decimal separator
+    const amountStr = newItem.value.amount ? String(newItem.value.amount).replace(',', '.') : ''
+    const amount = amountStr ? parseFloat(amountStr) : null
     const item = await api.addShoppingItem({
       productName: newItem.value.name.trim(),
       amount: amount,
@@ -326,9 +337,11 @@ async function saveEditedItem() {
 
   try {
     const productName = editItem.value.name.trim()
-    const amount = editItem.value.amount !== null && editItem.value.amount !== '' && editItem.value.amount !== undefined
-      ? parseFloat(editItem.value.amount)
-      : null
+    // Accept both comma and dot as decimal separator
+    const amountStr = editItem.value.amount !== null && editItem.value.amount !== '' && editItem.value.amount !== undefined
+      ? String(editItem.value.amount).replace(',', '.')
+      : ''
+    const amount = amountStr ? parseFloat(amountStr) : null
 
     await api.updateShoppingItem(editItem.value.id, {
       productName: productName,
@@ -576,13 +589,13 @@ async function clearAllItems() {
 
     <!-- Add item dialog -->
     <v-dialog v-model="showAddItemDialog" max-width="400">
-      <v-card>
+      <v-card @keydown.esc="showAddItemDialog = false" @keydown.enter="addManualItem">
         <v-card-title>Artikel hinzufügen</v-card-title>
         <v-card-text>
-          <v-text-field ref="addItemNameInput" v-model="newItem.name" label="Produkt" autofocus class="mb-3" @keyup.enter="addManualItem" />
+          <v-text-field ref="addItemNameInput" v-model="newItem.name" label="Produkt" autofocus class="mb-3" />
           <v-row>
             <v-col cols="6">
-              <v-text-field v-model.number="newItem.amount" label="Menge" type="number" inputmode="decimal" min="0" step="0.1" />
+              <v-text-field v-model="newItem.amount" label="Menge" type="text" inputmode="decimal" />
             </v-col>
             <v-col cols="6">
               <v-combobox v-model="newItem.unit" :items="['Stück', 'g', 'kg', 'ml', 'l', 'Packung', 'Bund', 'Paar']"
@@ -627,6 +640,9 @@ async function clearAllItems() {
             <v-list-item v-for="(source, idx) in selectedItem.sources" :key="idx">
               <v-list-item-title v-if="source.dishName">
                 {{ source.dishName }}
+                <span v-if="source.sourceDishId && source.sourceDishId !== source.dishId" class="text-medium-emphasis">
+                  ({{ source.sourceDishName }})
+                </span>
               </v-list-item-title>
               <v-list-item-title v-else-if="source.manual">
                 Manuell hinzugefügt
@@ -649,13 +665,13 @@ async function clearAllItems() {
 
     <!-- Edit item dialog -->
     <v-dialog v-model="showEditItemDialog" max-width="400">
-      <v-card>
+      <v-card @keydown.esc="showEditItemDialog = false" @keydown.enter="saveEditedItem">
         <v-card-title>Artikel bearbeiten</v-card-title>
         <v-card-text>
-          <v-text-field v-model="editItem.name" label="Produkt" autofocus class="mb-3" @keyup.enter="saveEditedItem" />
+          <v-text-field v-model="editItem.name" label="Produkt" autofocus class="mb-3" />
           <v-row>
             <v-col cols="6">
-              <v-text-field v-model.number="editItem.amount" label="Menge" type="number" inputmode="decimal" min="0" step="0.1" />
+              <v-text-field v-model="editItem.amount" label="Menge" type="text" inputmode="decimal" />
             </v-col>
             <v-col cols="6">
               <v-combobox v-model="editItem.unit" :items="['Stück', 'g', 'kg', 'ml', 'l', 'Packung', 'Bund', 'Paar']"

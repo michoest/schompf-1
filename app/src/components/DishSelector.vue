@@ -27,6 +27,7 @@ const search = ref('')
 const selectedType = ref('all')
 const selectedDish = ref(null)
 const servings = ref(2)
+const selectedSubDishes = ref([]) // Array of { id, dishId, scalingFactor, optional }
 const showEatingOutDialog = ref(false)
 const eatingOutDescription = ref('')
 
@@ -63,6 +64,21 @@ const filteredDishes = computed(() => {
   return [...result].sort((a, b) => a.name.localeCompare(b.name))
 })
 
+// Get subdishes for the selected dish with dish names
+const subDishesWithNames = computed(() => {
+  if (!selectedDish.value?.subDishes || selectedDish.value.subDishes.length === 0) {
+    return []
+  }
+
+  return selectedDish.value.subDishes.map(subDish => {
+    const dish = props.dishes.find(d => d.id === subDish.dishId)
+    return {
+      ...subDish,
+      dishName: dish?.name || 'Unbekannt'
+    }
+  })
+})
+
 // New functions:
 function chooseDish(dish) {
   // For "eating out", show description dialog
@@ -74,6 +90,15 @@ function chooseDish(dish) {
 
   selectedDish.value = dish
   servings.value = dish?.defaultServings || 2
+
+  // Pre-select non-optional subdishes with their full data
+  if (dish.subDishes && dish.subDishes.length > 0) {
+    selectedSubDishes.value = dish.subDishes
+      .filter(subDish => !subDish.optional)
+      .map(subDish => ({ ...subDish }))
+  } else {
+    selectedSubDishes.value = []
+  }
 }
 
 function confirmEatingOut() {
@@ -91,7 +116,18 @@ function confirmEatingOut() {
 }
 
 function confirmSelection() {
-  emit('select', { dish: selectedDish.value, servings: servings.value })
+  // selectedSubDishes already contains the full subdish objects with updated scalingFactors
+  const subDishes = selectedSubDishes.value.map(subDish => ({
+    dishId: subDish.dishId,
+    scalingFactor: parseFloat(subDish.scalingFactor) || 1,
+    optional: subDish.optional
+  }))
+
+  emit('select', {
+    dish: selectedDish.value,
+    servings: servings.value,
+    subDishes: subDishes
+  })
   emit('update:modelValue', false)
 }
 
@@ -117,6 +153,15 @@ watch(() => props.modelValue, (val) => {
     servings.value = props.initialServings || 2
     showEatingOutDialog.value = false
     eatingOutDescription.value = ''
+
+    // Pre-select non-optional subdishes if initialDish is set
+    if (props.initialDish?.subDishes && props.initialDish.subDishes.length > 0) {
+      selectedSubDishes.value = props.initialDish.subDishes
+        .filter(subDish => !subDish.optional)
+        .map(subDish => ({ ...subDish }))
+    } else {
+      selectedSubDishes.value = []
+    }
   }
 })
 </script>
@@ -194,6 +239,59 @@ watch(() => props.modelValue, (val) => {
                 <v-btn icon="mdi-plus" size="small" variant="text" :disabled="servings >= 20" @click="servings++" />
               </template>
             </v-text-field>
+
+            <!-- SubDishes Selection -->
+            <div v-if="subDishesWithNames.length > 0" class="mb-4">
+              <div class="text-subtitle-2 text-medium-emphasis mb-2 text-center">
+                Untergerichte
+              </div>
+              <v-list density="compact" class="mx-auto" style="max-width: 400px;">
+                <v-list-item
+                  v-for="subDish in subDishesWithNames"
+                  :key="subDish.id"
+                  class="px-2"
+                >
+                  <template #prepend>
+                    <v-checkbox-btn
+                      :model-value="selectedSubDishes.some(s => s.id === subDish.id)"
+                      @update:model-value="(val) => {
+                        if (val) {
+                          selectedSubDishes.push({ ...subDish })
+                        } else {
+                          selectedSubDishes = selectedSubDishes.filter(s => s.id !== subDish.id)
+                        }
+                      }"
+                      hide-details
+                    />
+                  </template>
+                  <v-list-item-title>
+                    {{ subDish.dishName }}
+                    <v-chip v-if="subDish.optional" size="x-small" variant="outlined" class="ml-1">
+                      optional
+                    </v-chip>
+                  </v-list-item-title>
+                  <v-list-item-subtitle>
+                    <v-text-field
+                      v-if="selectedSubDishes.some(s => s.id === subDish.id)"
+                      :model-value="selectedSubDishes.find(s => s.id === subDish.id)?.scalingFactor || 1"
+                      @update:model-value="(val) => {
+                        const selected = selectedSubDishes.find(s => s.id === subDish.id)
+                        if (selected) {
+                          selected.scalingFactor = val
+                        }
+                      }"
+                      label="Faktor"
+                      type="text"
+                      inputmode="decimal"
+                      density="compact"
+                      hide-details
+                      class="mt-1"
+                      style="max-width: 120px;"
+                    />
+                  </v-list-item-subtitle>
+                </v-list-item>
+              </v-list>
+            </div>
 
             <div class="d-flex justify-center gap-2">
               <v-btn v-if="!showCancel" variant="text" @click="goBack">
