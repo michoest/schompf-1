@@ -223,9 +223,7 @@ function close() {
                           <strong>{{ ing.scaledAmount }} {{ ing.unit }}</strong>
                         </span>
                         {{ ing.productName }}
-                        <v-chip v-if="ing.optional" size="x-small" variant="outlined" class="ml-1">
-                          optional
-                        </v-chip>
+                        <v-icon v-if="ing.optional" icon="mdi-help-circle" size="small" color="info" class="ml-1" />
                         <v-chip v-if="ing.sourceDish" size="x-small" color="secondary" class="ml-1">
                           {{ ing.sourceDish }}
                         </v-chip>

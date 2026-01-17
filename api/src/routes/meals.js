@@ -155,7 +155,7 @@ router.put('/:id', async (req, res) => {
       servings: servings ?? db.data.meals[index].servings,
       notes: notes !== undefined ? notes : db.data.meals[index].notes,
       subDishes: validatedSubDishes,
-      status: status !== undefined ? status : (db.data.meals[index].status || db.data.meals[index].committed ? 'committed' : 'planned'),
+      status: status !== undefined ? status : (db.data.meals[index].status || (db.data.meals[index].committed ? 'committed' : 'planned')),
       updatedAt: new Date().toISOString()
     };
 

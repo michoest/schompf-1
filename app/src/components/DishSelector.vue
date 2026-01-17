@@ -266,9 +266,7 @@ watch(() => props.modelValue, (val) => {
                   </template>
                   <v-list-item-title>
                     {{ subDish.dishName }}
-                    <v-chip v-if="subDish.optional" size="x-small" variant="outlined" class="ml-1">
-                      optional
-                    </v-chip>
+                    <v-icon v-if="subDish.optional" icon="mdi-help-circle" size="small" color="info" class="ml-1" />
                   </v-list-item-title>
                   <v-list-item-subtitle>
                     <v-text-field

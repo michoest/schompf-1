@@ -45,34 +45,41 @@ router.get('/current', async (req, res) => {
  */
 const unitNormalization = {
   // Weight
-  'g': { base: 'g', factor: 1 },
-  'kg': { base: 'g', factor: 1000 },
-  'gramm': { base: 'g', factor: 1 },
-  'kilogramm': { base: 'g', factor: 1000 },
+  'g': { base: 'g', factor: 1, group: 'weight' },
+  'kg': { base: 'g', factor: 1000, group: 'weight' },
+  'gramm': { base: 'g', factor: 1, group: 'weight' },
+  'kilogramm': { base: 'g', factor: 1000, group: 'weight' },
   // Volume
-  'ml': { base: 'ml', factor: 1 },
-  'l': { base: 'ml', factor: 1000 },
-  'liter': { base: 'ml', factor: 1000 },
-  'milliliter': { base: 'ml', factor: 1 },
+  'ml': { base: 'ml', factor: 1, group: 'volume' },
+  'l': { base: 'ml', factor: 1000, group: 'volume' },
+  'liter': { base: 'ml', factor: 1000, group: 'volume' },
+  'milliliter': { base: 'ml', factor: 1, group: 'volume' },
   // Count
-  'stück': { base: 'stück', factor: 1 },
-  'stk': { base: 'stück', factor: 1 },
-  'st': { base: 'stück', factor: 1 },
+  'stück': { base: 'stück', factor: 1, group: 'count' },
+  'stk': { base: 'stück', factor: 1, group: 'count' },
+  'st': { base: 'stück', factor: 1, group: 'count' },
   // Others stay as-is
 };
 
 function normalizeUnit(amount, unit) {
   const lowerUnit = (unit || '').toLowerCase().trim();
   const norm = unitNormalization[lowerUnit];
-  
+
   if (norm) {
     return {
       amount: amount * norm.factor,
-      unit: norm.base
+      unit: norm.base,
+      group: norm.group
     };
   }
-  
-  return { amount, unit: unit || '' };
+
+  return { amount, unit: unit || '', group: null };
+}
+
+function getUnitGroup(unit) {
+  const lowerUnit = (unit || '').toLowerCase().trim();
+  const norm = unitNormalization[lowerUnit];
+  return norm?.group || null;
 }
 
 function formatAmount(amount, unit) {
@@ -91,6 +98,103 @@ function formatAmount(amount, unit) {
 
   const displayAmount = Number.isInteger(amount) ? amount : amount.toFixed(1).replace(/\.0$/, '');
   return { amount, unit, display: unit ? `${displayAmount} ${unit}` : `${displayAmount}` };
+}
+
+/**
+ * Get unique key for a shopping list item
+ * Items are unique by productName (lowercase) + categoryId
+ */
+function getItemKey(productName, categoryId) {
+  return `${(productName || '').toLowerCase().trim()}::${categoryId || 'null'}`;
+}
+
+/**
+ * Aggregate amounts by unit group
+ * Returns an object with { unitGroups: { [group]: { amount, unit } }, incompatible: [...] }
+ */
+function aggregateAmounts(amounts) {
+  const unitGroups = {};  // { weight: { amount: 500, unit: 'g' }, volume: { amount: 200, unit: 'ml' } }
+  const incompatible = []; // Amounts that couldn't be normalized
+
+  for (const amt of amounts) {
+    if (amt.amount === null || amt.amount === undefined || amt.amount === 0) {
+      // Skip amounts without values (like "salt to taste")
+      continue;
+    }
+
+    const normalized = normalizeUnit(amt.amount, amt.unit);
+
+    if (normalized.group) {
+      // This unit can be normalized
+      if (!unitGroups[normalized.group]) {
+        unitGroups[normalized.group] = { amount: 0, unit: normalized.unit };
+      }
+      unitGroups[normalized.group].amount += normalized.amount;
+    } else {
+      // Can't normalize - check if we already have this unit
+      const existingIdx = incompatible.findIndex(i =>
+        (i.unit || '').toLowerCase() === (amt.unit || '').toLowerCase()
+      );
+      if (existingIdx !== -1) {
+        incompatible[existingIdx].amount += amt.amount;
+      } else {
+        incompatible.push({ amount: amt.amount, unit: amt.unit || '' });
+      }
+    }
+  }
+
+  return { unitGroups, incompatible };
+}
+
+/**
+ * Format aggregated amounts for display
+ */
+function formatAggregatedDisplay(unitGroups, incompatible) {
+  const parts = [];
+
+  // Format each unit group
+  for (const group of Object.values(unitGroups)) {
+    const formatted = formatAmount(group.amount, group.unit);
+    if (formatted.display) {
+      parts.push(formatted.display);
+    }
+  }
+
+  // Add incompatible amounts
+  for (const inc of incompatible) {
+    const formatted = formatAmount(inc.amount, inc.unit);
+    if (formatted.display) {
+      parts.push(formatted.display);
+    }
+  }
+
+  return parts.join(' + ') || '';
+}
+
+/**
+ * Calculate total amount from amounts array, respecting unit groups
+ */
+function calculateTotals(amounts) {
+  const { unitGroups, incompatible } = aggregateAmounts(amounts);
+  const displayAmount = formatAggregatedDisplay(unitGroups, incompatible);
+
+  // For simple cases (single unit group), return the primary values
+  const groups = Object.values(unitGroups);
+  if (groups.length === 1 && incompatible.length === 0) {
+    const formatted = formatAmount(groups[0].amount, groups[0].unit);
+    return {
+      amount: formatted.amount,
+      unit: formatted.unit,
+      displayAmount: formatted.display
+    };
+  }
+
+  // For mixed units, return null for amount/unit but provide display
+  return {
+    amount: null,
+    unit: null,
+    displayAmount
+  };
 }
 
 /**
@@ -177,11 +281,11 @@ router.post('/generate', async (req, res) => {
       };
     }
 
-    // Start with existing items (preserve manual items and checked state)
-    const existingItems = new Map();
+    // Build map of existing items by productName+categoryId key
+    const existingItemsMap = new Map();
     for (const item of db.data.shoppingList.items) {
-      const key = `${item.productId || item.productName}-${item.unit}`;
-      existingItems.set(key, item);
+      const key = getItemKey(item.productName, item.categoryId);
+      existingItemsMap.set(key, item);
     }
 
     // Get meals in date range that are NOT yet committed
@@ -189,9 +293,10 @@ router.post('/generate', async (req, res) => {
       m.date >= fromDate && m.date <= toDate && (!m.status || m.status === 'planned')
     );
 
-    // Collect all ingredients with traceability
-    const ingredientMap = new Map(); // productName -> aggregated data
-    
+    // Collect new meal sources to add
+    // Key: productName+categoryId -> { productInfo, sources[] }
+    const newMealSources = new Map();
+
     for (const meal of meals) {
       if (!meal.dishId) continue;
 
@@ -202,32 +307,25 @@ router.post('/generate', async (req, res) => {
       const ingredients = collectMealIngredients(meal, db);
 
       for (const ing of ingredients) {
-        const key = `${ing.productId || ing.productName}-${ing.unit}`;
-        const normalized = normalizeUnit(ing.amount, ing.unit);
+        // Find product for category info
+        const product = ing.productId ? db.data.products.find(p => p.id === ing.productId) : null;
+        const categoryId = product?.categoryId || null;
+        const productName = ing.productName || product?.name || 'Unbekannt';
 
-        if (!ingredientMap.has(key)) {
-          // Find product for category info
-          const product = ing.productId ? db.data.products.find(p => p.id === ing.productId) : null;
+        const key = getItemKey(productName, categoryId);
 
-          ingredientMap.set(key, {
-            productId: ing.productId,
-            productName: ing.productName || product?.name || 'Unbekannt',
-            totalAmount: 0,
-            optionalAmount: 0,
-            unit: normalized.unit,
-            categoryId: product?.categoryId || null,
+        if (!newMealSources.has(key)) {
+          newMealSources.set(key, {
+            productId: ing.productId || product?.id || null,
+            productName,
+            categoryId,
             freshnessDays: product?.freshnessDays || db.data.settings.defaultFreshnessDays,
-            sources: [] // Track which meals this is for
+            sources: []
           });
         }
 
-        const entry = ingredientMap.get(key);
-        if (ing.optional) {
-          entry.optionalAmount += normalized.amount;
-        } else {
-          entry.totalAmount += normalized.amount;
-        }
-        entry.sources.push({
+        newMealSources.get(key).sources.push({
+          sourceType: 'meal',
           mealId: meal.id,
           mealDate: meal.date,
           mealSlot: meal.slotName,
@@ -237,58 +335,61 @@ router.post('/generate', async (req, res) => {
           sourceDishName: ing.sourceDishName,
           amount: ing.amount,
           unit: ing.unit,
-          optional: ing.optional || false
+          optional: ing.optional || false,
+          addedAt: new Date().toISOString()
         });
       }
     }
-    
-    // Merge new ingredients with existing items
-    const mergedItems = new Map(existingItems); // Start with existing items
 
-    for (const [key, data] of ingredientMap) {
-      if (mergedItems.has(key)) {
-        // Item exists - merge amounts and sources
-        const existing = mergedItems.get(key);
-        const normalized = normalizeUnit(data.totalAmount, data.unit);
-        const existingNormalized = normalizeUnit(existing.amount, existing.unit);
-        const mergedAmount = existingNormalized.amount + normalized.amount;
-        const formatted = formatAmount(mergedAmount, normalized.unit);
+    // Merge new sources with existing items
+    for (const [key, data] of newMealSources) {
+      if (existingItemsMap.has(key)) {
+        // Item exists - add new sources (avoid duplicates by mealId)
+        const existing = existingItemsMap.get(key);
 
-        existing.amount = formatted.amount;
-        existing.unit = formatted.unit;
-        existing.displayAmount = formatted.display;
-        existing.sources = [...(existing.sources || []), ...data.sources];
-        // Preserve checked state and other properties
+        // Migrate old sources format to new amounts format if needed
+        if (!existing.amounts && existing.sources) {
+          existing.amounts = existing.sources.map(s => ({
+            ...s,
+            sourceType: s.manual ? 'manual' : 'meal'
+          }));
+          delete existing.sources;
+        }
+        if (!existing.amounts) {
+          existing.amounts = [];
+        }
+
+        const existingMealIds = new Set(
+          existing.amounts
+            .filter(a => a.sourceType === 'meal')
+            .map(a => a.mealId)
+        );
+
+        // Only add sources from meals we haven't already added
+        const newSources = data.sources.filter(s => !existingMealIds.has(s.mealId));
+        if (newSources.length > 0) {
+          existing.amounts = [...existing.amounts, ...newSources];
+          // Recalculate totals
+          const totals = calculateTotals(existing.amounts.filter(a => !a.deleted));
+          existing.displayAmount = totals.displayAmount;
+          existing.amount = totals.amount;
+          existing.unit = totals.unit;
+        }
       } else {
-        // New item - add it
-        const formatted = formatAmount(data.totalAmount, data.unit);
-        const formattedOptional = data.optionalAmount > 0 ? formatAmount(data.optionalAmount, data.unit) : null;
-
-        // Build display amount with optional portion
-        let displayAmount = formatted.display;
-        if (formattedOptional) {
-          displayAmount = `${formatted.display} (optional + ${formattedOptional.display})`;
-        }
-
-        // Find category and vendor
-        let category = null;
-        let vendor = null;
-        if (data.categoryId) {
-          category = db.data.categories.find(c => c.id === data.categoryId);
-          if (category) {
-            vendor = db.data.vendors.find(v => v.id === category.vendorId);
-          }
-        }
-
-        // Calculate freshness urgency and earliest purchase date
-        const earliestUseDate = data.sources.reduce((min, s) => s.mealDate < min ? s.mealDate : min, data.sources[0]?.mealDate);
-
-        // Calculate days from shopping date to earliest use
-        const daysUntilUse = shoppingDate
-          ? Math.ceil((parseLocalDate(earliestUseDate) - parseLocalDate(shoppingDate)) / (1000 * 60 * 60 * 24))
+        // New item - create it
+        const category = data.categoryId
+          ? db.data.categories.find(c => c.id === data.categoryId)
+          : null;
+        const vendor = category
+          ? db.data.vendors.find(v => v.id === category.vendorId)
           : null;
 
-        // Calculate earliest purchase date: earliest use date minus freshness days
+        // Calculate freshness info
+        const mealSources = data.sources.filter(s => s.mealDate);
+        const earliestUseDate = mealSources.length > 0
+          ? mealSources.reduce((min, s) => s.mealDate < min ? s.mealDate : min, mealSources[0].mealDate)
+          : null;
+
         let earliestPurchaseDate = null;
         if (earliestUseDate && data.freshnessDays !== null) {
           const purchaseDate = parseLocalDate(earliestUseDate);
@@ -296,25 +397,19 @@ router.post('/generate', async (req, res) => {
           earliestPurchaseDate = formatDate(purchaseDate);
         }
 
-        // Determine freshness status based on shopping date
         let freshnessStatus = 'ok';
         if (shoppingDate && earliestPurchaseDate) {
-          // Compare shopping date with earliest purchase date
           if (shoppingDate < earliestPurchaseDate) {
-            freshnessStatus = 'wait'; // Too early - won't stay fresh
-          } else {
-            freshnessStatus = 'ok'; // Can buy now
+            freshnessStatus = 'wait';
           }
         }
 
-        mergedItems.set(key, {
+        const totals = calculateTotals(data.sources);
+
+        existingItemsMap.set(key, {
           id: uuidv4(),
           productId: data.productId,
           productName: data.productName,
-          amount: formatted.amount,
-          unit: formatted.unit,
-          displayAmount: displayAmount,
-          optionalAmount: data.optionalAmount > 0 ? formattedOptional.amount : null,
           categoryId: data.categoryId,
           categoryName: category?.name || null,
           categoryOrder: category?.order ?? 999,
@@ -325,14 +420,18 @@ router.post('/generate', async (req, res) => {
           earliestUseDate,
           earliestPurchaseDate,
           freshnessStatus,
-          sources: data.sources,
-          checked: false
+          amounts: data.sources,
+          amount: totals.amount,
+          unit: totals.unit,
+          displayAmount: totals.displayAmount,
+          checked: false,
+          deleted: false
         });
       }
     }
 
     // Convert to array and sort
-    const items = Array.from(mergedItems.values());
+    const items = Array.from(existingItemsMap.values());
     items.sort((a, b) => {
       if (a.vendorName !== b.vendorName) {
         if (a.vendorName === 'Sonstiges') return 1;
@@ -354,7 +453,7 @@ router.post('/generate', async (req, res) => {
       generatedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       items,
-      mealIds: meals.map(m => m.id) // IDs of uncommitted meals included in this update
+      mealIds: meals.map(m => m.id)
     };
 
     await db.write();
@@ -389,48 +488,98 @@ router.post('/add-item', async (req, res) => {
       p.name.toLowerCase() === productName.toLowerCase()
     );
 
+    // Determine final category - use provided categoryId, or product's default
+    const finalCategoryId = categoryId !== undefined ? categoryId : (product?.categoryId || null);
+
     // Find category and vendor
     let category = null;
     let vendor = null;
-    const catId = categoryId || product?.categoryId;
-    if (catId) {
-      category = db.data.categories.find(c => c.id === catId);
+    if (finalCategoryId) {
+      category = db.data.categories.find(c => c.id === finalCategoryId);
       if (category) {
         vendor = db.data.vendors.find(v => v.id === category.vendorId);
       }
     }
 
-    const finalAmount = amount !== null && amount !== undefined ? amount : null;
-    const finalUnit = unit || null;
-    const formatted = formatAmount(finalAmount, finalUnit);
+    const finalProductName = product?.name || productName;
+    const key = getItemKey(finalProductName, finalCategoryId);
 
-    const item = {
-      id: uuidv4(),
-      productId: product?.id || null,
-      productName: product?.name || productName,
-      amount: formatted.amount,
-      unit: formatted.unit,
-      displayAmount: formatted.display,
-      categoryId: catId || null,
-      categoryName: category?.name || null,
-      categoryOrder: category?.order ?? 999,
-      vendorId: vendor?.id || null,
-      vendorName: vendor?.name || 'Sonstiges',
-      vendorColor: vendor?.color || '#9CA3AF',
-      freshnessDays: product?.freshnessDays || db.data.settings.defaultFreshnessDays,
-      earliestUseDate: null,
-      freshnessStatus: 'ok',
-      sources: [{ manual: true, addedAt: new Date().toISOString() }],
-      checked: false
+    // Check if item with same productName+categoryId already exists
+    const existingItem = db.data.shoppingList.items.find(item =>
+      getItemKey(item.productName, item.categoryId) === key
+    );
+
+    const newSource = {
+      sourceType: 'manual',
+      amount: amount !== null && amount !== undefined ? amount : null,
+      unit: unit || null,
+      addedAt: new Date().toISOString()
     };
 
-    // Add to shopping list and save
-    db.data.shoppingList.items.push(item);
+    let resultItem;
+
+    if (existingItem) {
+      // Merge with existing item - add new source
+      // Migrate old sources format if needed
+      if (!existingItem.amounts && existingItem.sources) {
+        existingItem.amounts = existingItem.sources.map(s => ({
+          ...s,
+          sourceType: s.manual ? 'manual' : 'meal'
+        }));
+        delete existingItem.sources;
+      }
+      if (!existingItem.amounts) {
+        existingItem.amounts = [];
+      }
+
+      existingItem.amounts.push(newSource);
+
+      // Recalculate totals
+      const totals = calculateTotals(existingItem.amounts.filter(a => !a.deleted));
+      existingItem.displayAmount = totals.displayAmount;
+      existingItem.amount = totals.amount;
+      existingItem.unit = totals.unit;
+
+      // If item was soft-deleted, restore it
+      if (existingItem.deleted) {
+        existingItem.deleted = false;
+      }
+
+      resultItem = existingItem;
+    } else {
+      // Create new item
+      const formatted = formatAmount(newSource.amount, newSource.unit);
+
+      resultItem = {
+        id: uuidv4(),
+        productId: product?.id || null,
+        productName: finalProductName,
+        categoryId: finalCategoryId,
+        categoryName: category?.name || null,
+        categoryOrder: category?.order ?? 999,
+        vendorId: vendor?.id || null,
+        vendorName: vendor?.name || 'Sonstiges',
+        vendorColor: vendor?.color || '#9CA3AF',
+        freshnessDays: product?.freshnessDays || db.data.settings.defaultFreshnessDays,
+        earliestUseDate: null,
+        freshnessStatus: 'ok',
+        amounts: [newSource],
+        amount: formatted.amount,
+        unit: formatted.unit,
+        displayAmount: formatted.display,
+        checked: false,
+        deleted: false
+      };
+
+      db.data.shoppingList.items.push(resultItem);
+    }
+
     db.data.shoppingList.updatedAt = new Date().toISOString();
     await db.write();
 
-    res.status(201).json(item);
+    res.status(201).json(resultItem);
   } catch (error) {
+    console.error('Error adding shopping item:', error);
     res.status(500).json({ error: 'Fehler beim Hinzufügen des Artikels' });
   }
 });
@@ -478,13 +627,12 @@ router.post('/remove-checked', async (req, res) => {
   }
 });
 
-// Update shopping item (for manually added items)
+// Update shopping item
+// - amount/unit: Calculate delta from current total and add as manual adjustment
+// - categoryId: Update item's category (changes where it appears, but unique key for merging is still original)
 router.put('/item/:itemId', async (req, res) => {
   try {
-    const { productName, amount, unit, categoryId } = req.body;
-    if (!productName) {
-      return res.status(400).json({ error: 'productName ist erforderlich' });
-    }
+    const { amount, unit, categoryId } = req.body;
 
     await db.read();
 
@@ -497,44 +645,95 @@ router.put('/item/:itemId', async (req, res) => {
       return res.status(404).json({ error: 'Artikel nicht gefunden' });
     }
 
-    // Only allow editing manually added items
-    if (!item.sources?.some(s => s.manual)) {
-      return res.status(403).json({ error: 'Nur manuell hinzugefügte Artikel können bearbeitet werden' });
+    // Migrate old sources format if needed
+    if (!item.amounts && item.sources) {
+      item.amounts = item.sources.map(s => ({
+        ...s,
+        sourceType: s.manual ? 'manual' : 'meal'
+      }));
+      delete item.sources;
+    }
+    if (!item.amounts) {
+      item.amounts = [];
     }
 
-    // Try to find existing product
-    let product = db.data.products.find(p =>
-      p.name.toLowerCase() === productName.toLowerCase()
-    );
+    // Handle amount changes - calculate delta and add as manual adjustment
+    if (amount !== undefined && unit !== undefined) {
+      // Normalize the new desired amount
+      const normalizedNew = normalizeUnit(amount, unit);
 
-    // Find category and vendor
-    let category = null;
-    let vendor = null;
-    const catId = categoryId !== undefined ? categoryId : product?.categoryId;
-    if (catId) {
-      category = db.data.categories.find(c => c.id === catId);
-      if (category) {
-        vendor = db.data.vendors.find(v => v.id === category.vendorId);
+      // Calculate current total for this unit group
+      const currentAmounts = item.amounts.filter(a => !a.deleted);
+      const { unitGroups } = aggregateAmounts(currentAmounts);
+
+      // Find the matching unit group
+      const targetGroup = normalizedNew.group;
+      let currentTotal = 0;
+
+      if (targetGroup && unitGroups[targetGroup]) {
+        currentTotal = unitGroups[targetGroup].amount;
+      } else {
+        // For non-normalized units, sum amounts with same unit
+        const sameUnitAmounts = currentAmounts.filter(a =>
+          (a.unit || '').toLowerCase() === (unit || '').toLowerCase()
+        );
+        currentTotal = sameUnitAmounts.reduce((sum, a) => sum + (a.amount || 0), 0);
+      }
+
+      // Calculate delta
+      const delta = normalizedNew.amount - currentTotal;
+
+      // Only add adjustment if there's a difference
+      if (Math.abs(delta) > 0.001) {
+        // Convert delta back to display unit
+        let adjustmentAmount = delta;
+        let adjustmentUnit = normalizedNew.unit;
+
+        // If the new unit is the display unit (e.g., 'kg' vs 'g'), use it
+        if (unit && normalizedNew.unit !== unit.toLowerCase()) {
+          // User specified a larger unit, convert back
+          const userNorm = unitNormalization[unit.toLowerCase()];
+          if (userNorm && userNorm.group === targetGroup) {
+            adjustmentAmount = delta / userNorm.factor;
+            adjustmentUnit = unit;
+          }
+        }
+
+        item.amounts.push({
+          sourceType: 'manual',
+          amount: adjustmentAmount,
+          unit: adjustmentUnit,
+          addedAt: new Date().toISOString(),
+          isAdjustment: true
+        });
       }
     }
 
-    const finalAmount = amount !== null && amount !== undefined ? amount : null;
-    const finalUnit = unit || null;
-    const formatted = formatAmount(finalAmount, finalUnit);
+    // Handle category change - update display category (doesn't affect merge key)
+    if (categoryId !== undefined) {
+      let category = null;
+      let vendor = null;
 
-    // Update item properties
-    item.productId = product?.id || null;
-    item.productName = product?.name || productName;
-    item.amount = formatted.amount;
-    item.unit = formatted.unit;
-    item.displayAmount = formatted.display;
-    item.categoryId = catId || null;
-    item.categoryName = category?.name || null;
-    item.categoryOrder = category?.order ?? 999;
-    item.vendorId = vendor?.id || null;
-    item.vendorName = vendor?.name || 'Sonstiges';
-    item.vendorColor = vendor?.color || '#9CA3AF';
-    item.freshnessDays = product?.freshnessDays || db.data.settings.defaultFreshnessDays;
+      if (categoryId) {
+        category = db.data.categories.find(c => c.id === categoryId);
+        if (category) {
+          vendor = db.data.vendors.find(v => v.id === category.vendorId);
+        }
+      }
+
+      item.categoryId = categoryId;
+      item.categoryName = category?.name || null;
+      item.categoryOrder = category?.order ?? 999;
+      item.vendorId = vendor?.id || null;
+      item.vendorName = vendor?.name || 'Sonstiges';
+      item.vendorColor = vendor?.color || '#9CA3AF';
+    }
+
+    // Recalculate totals
+    const totals = calculateTotals(item.amounts.filter(a => !a.deleted));
+    item.displayAmount = totals.displayAmount;
+    item.amount = totals.amount;
+    item.unit = totals.unit;
 
     db.data.shoppingList.updatedAt = new Date().toISOString();
     await db.write();
@@ -546,7 +745,7 @@ router.put('/item/:itemId', async (req, res) => {
   }
 });
 
-// Delete shopping item
+// Delete shopping item (soft delete - preserves sources for traceability)
 router.delete('/item/:itemId', async (req, res) => {
   try {
     await db.read();
@@ -555,12 +754,52 @@ router.delete('/item/:itemId', async (req, res) => {
       return res.status(404).json({ error: 'Keine Einkaufsliste vorhanden' });
     }
 
-    const itemIndex = db.data.shoppingList.items.findIndex(i => i.id === req.params.itemId);
-    if (itemIndex === -1) {
+    const item = db.data.shoppingList.items.find(i => i.id === req.params.itemId);
+    if (!item) {
       return res.status(404).json({ error: 'Artikel nicht gefunden' });
     }
 
-    db.data.shoppingList.items.splice(itemIndex, 1);
+    // Migrate old sources format if needed
+    if (!item.amounts && item.sources) {
+      item.amounts = item.sources.map(s => ({
+        ...s,
+        sourceType: s.manual ? 'manual' : 'meal'
+      }));
+      delete item.sources;
+    }
+
+    // Check if item has any meal sources
+    const hasMealSources = (item.amounts || []).some(a => a.sourceType === 'meal');
+
+    if (hasMealSources) {
+      // Soft delete - mark as deleted but preserve sources
+      item.deleted = true;
+
+      // Add negative adjustment to zero out the total
+      const currentAmounts = (item.amounts || []).filter(a => !a.deleted);
+      const totals = calculateTotals(currentAmounts);
+
+      if (totals.amount && totals.amount > 0) {
+        item.amounts.push({
+          sourceType: 'manual',
+          amount: -totals.amount,
+          unit: totals.unit,
+          addedAt: new Date().toISOString(),
+          isAdjustment: true,
+          reason: 'deleted'
+        });
+      }
+
+      // Recalculate (should be zero or empty)
+      const newTotals = calculateTotals(item.amounts.filter(a => !a.deleted));
+      item.displayAmount = newTotals.displayAmount || '0';
+      item.amount = 0;
+    } else {
+      // No meal sources - can safely hard delete
+      const itemIndex = db.data.shoppingList.items.findIndex(i => i.id === req.params.itemId);
+      db.data.shoppingList.items.splice(itemIndex, 1);
+    }
+
     db.data.shoppingList.updatedAt = new Date().toISOString();
     await db.write();
 

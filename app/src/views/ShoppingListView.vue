@@ -41,7 +41,7 @@ watch(() => newItem.value.name, (name) => {
     return
   }
 
-  // Find matching product (case-insensitive)
+  // Find matching product (case-insensitive, exact match)
   const nameLower = name.toLowerCase().trim()
   const matchingProduct = productsStore.products.find(p =>
     p.name.toLowerCase() === nameLower
@@ -49,6 +49,9 @@ watch(() => newItem.value.name, (name) => {
 
   if (matchingProduct && matchingProduct.categoryId) {
     newItem.value.categoryId = matchingProduct.categoryId
+  } else {
+    // Clear category if no exact match (prevents prefix products from sticking)
+    newItem.value.categoryId = null
   }
 })
 
@@ -77,37 +80,42 @@ watch(showAddItemDialog, (open) => {
   }
 })
 
-watch(() => editItem.value.name, (name) => {
-  // Don't auto-update if user explicitly selected a category
-  if (userSelectedEditCategory.value) return
-
-  if (!name || name.trim().length < 2) {
-    return
-  }
-
-  // Find matching product (case-insensitive)
-  const nameLower = name.toLowerCase().trim()
-  const matchingProduct = productsStore.products.find(p =>
-    p.name.toLowerCase() === nameLower
-  )
-
-  if (matchingProduct && matchingProduct.categoryId) {
-    editItem.value.categoryId = matchingProduct.categoryId
-  }
-})
-
 watch(showEditItemDialog, (open) => {
   if (!open) {
-    editItem.value = { id: null, name: '', amount: 1, unit: 'Stück', categoryId: null }
+    editItem.value = { id: null, name: '', amount: 1, unit: 'Stück', categoryId: null, hasMealSources: false }
     userSelectedEditCategory.value = false
   }
 })
+
+// Helper to check if item has meal sources (new amounts format or old sources format)
+function hasMealSources(item) {
+  if (item.amounts) {
+    return item.amounts.some(a => a.sourceType === 'meal')
+  }
+  // Fallback for old format
+  return item.sources?.some(s => !s.manual)
+}
+
+// Helper to get all sources (amounts) for display
+function getItemSources(item) {
+  if (item.amounts) {
+    return item.amounts
+  }
+  // Convert old format
+  return (item.sources || []).map(s => ({
+    ...s,
+    sourceType: s.manual ? 'manual' : 'meal'
+  }))
+}
 
 // Computed
 const filteredItems = computed(() => {
   if (!shoppingStore.shoppingList?.items) return []
 
   return shoppingStore.shoppingList.items.filter(item => {
+    // Hide soft-deleted items
+    if (item.deleted) return false
+
     // Keep items that are being checked visible for animation
     if (itemsBeingChecked.value.has(item.id)) return true
 
@@ -156,7 +164,7 @@ const checkedCount = computed(() => {
 
 const totalCount = computed(() => {
   if (!shoppingStore.shoppingList?.items) return 0
-  return shoppingStore.shoppingList.items.length
+  return shoppingStore.shoppingList.items.filter(i => !i.deleted).length
 })
 
 // Items that should be counted (respects future items filter, but not checked filter)
@@ -164,6 +172,8 @@ const countableItems = computed(() => {
   if (!shoppingStore.shoppingList?.items) return []
 
   return shoppingStore.shoppingList.items.filter(item => {
+    // Exclude soft-deleted items
+    if (item.deleted) return false
     // Filter by future items (items with 'wait' status)
     if (!showFutureItems.value && item.freshnessStatus === 'wait') return false
     return true
@@ -312,31 +322,22 @@ function onEditCategorySelect(categoryId) {
 }
 
 function openEditDialog(item) {
-  // Only allow editing manually added items
-  if (!item.sources?.some(s => s.manual)) {
-    appStore.showSnackbar('Nur manuell hinzugefügte Artikel können bearbeitet werden', 'warning')
-    return
-  }
-
+  // All items can now be edited (amount and category)
   editItem.value = {
     id: item.id,
     name: item.productName,
     amount: item.amount,
     unit: item.unit,
-    categoryId: item.categoryId
+    categoryId: item.categoryId,
+    hasMealSources: hasMealSources(item)
   }
   userSelectedEditCategory.value = false
   showEditItemDialog.value = true
 }
 
 async function saveEditedItem() {
-  if (!editItem.value.name.trim()) {
-    appStore.showSnackbar('Name ist erforderlich', 'error')
-    return
-  }
-
   try {
-    const productName = editItem.value.name.trim()
+    const productName = editItem.value.name
     // Accept both comma and dot as decimal separator
     const amountStr = editItem.value.amount !== null && editItem.value.amount !== '' && editItem.value.amount !== undefined
       ? String(editItem.value.amount).replace(',', '.')
@@ -344,7 +345,6 @@ async function saveEditedItem() {
     const amount = amountStr ? parseFloat(amountStr) : null
 
     await api.updateShoppingItem(editItem.value.id, {
-      productName: productName,
       amount: amount,
       unit: editItem.value.unit || null,
       categoryId: editItem.value.categoryId
@@ -372,13 +372,8 @@ async function deleteItem() {
     const productName = itemToDelete.value.productName
     await api.deleteShoppingItem(itemToDelete.value.id)
 
-    // Remove from local state
-    if (shoppingStore.shoppingList?.items) {
-      const index = shoppingStore.shoppingList.items.findIndex(i => i.id === itemToDelete.value.id)
-      if (index !== -1) {
-        shoppingStore.shoppingList.items.splice(index, 1)
-      }
-    }
+    // Reload list to get updated state (handles both soft and hard delete)
+    await shoppingStore.loadCurrentList()
 
     showDeleteConfirmDialog.value = false
     itemToDelete.value = null
@@ -513,7 +508,7 @@ async function clearAllItems() {
 
               <!-- Items in this category -->
               <v-list-item v-for="item in category.items" :key="item.id" :class="{ 'item-checked': item.checked }"
-                @click="item.sources?.some(s => s.manual) ? openEditDialog(item) : null">
+                @click="openEditDialog(item)">
                 <template #prepend>
                   <v-checkbox-btn :model-value="item.checked" color="primary" @click.stop="toggleItem(item)" />
                 </template>
@@ -544,16 +539,16 @@ async function clearAllItems() {
                       </div>
                     </v-tooltip>
 
-                    <!-- Source info button -->
-                    <v-btn v-if="item.sources?.length" icon="mdi-information-outline" variant="text" size="x-small"
+                    <!-- Source info button - show if has any sources -->
+                    <v-btn v-if="getItemSources(item).length > 0" icon="mdi-information-outline" variant="text" size="x-small"
                       @click.stop="showSources(item)" />
 
-                    <!-- Edit button (only for manually added items) -->
-                    <v-btn v-if="item.sources?.some(s => s.manual)" icon="mdi-pencil" variant="text" size="x-small"
+                    <!-- Edit button - all items can be edited -->
+                    <v-btn icon="mdi-pencil" variant="text" size="x-small"
                       @click.stop="openEditDialog(item)" />
 
-                    <!-- Delete button (only for manually added items) -->
-                    <v-btn v-if="item.sources?.some(s => s.manual)" icon="mdi-delete" variant="text" size="x-small"
+                    <!-- Delete button - all items can be deleted -->
+                    <v-btn icon="mdi-delete" variant="text" size="x-small"
                       color="error" @click.stop="confirmDeleteItem(item)" />
                   </div>
                 </template>
@@ -635,22 +630,31 @@ async function clearAllItems() {
         <v-card-title>{{ selectedItem.productName }}</v-card-title>
         <v-card-subtitle>{{ selectedItem.displayAmount }}</v-card-subtitle>
         <v-card-text>
-          <div class="text-subtitle-2 mb-2">Verwendet für:</div>
+          <div class="text-subtitle-2 mb-2">Mengen:</div>
           <v-list density="compact">
-            <v-list-item v-for="(source, idx) in selectedItem.sources" :key="idx">
+            <v-list-item v-for="(source, idx) in getItemSources(selectedItem)" :key="idx">
+              <template #prepend>
+                <v-icon
+                  :icon="source.sourceType === 'meal' ? 'mdi-silverware-fork-knife' : 'mdi-pencil'"
+                  size="small"
+                  class="mr-2"
+                />
+              </template>
               <v-list-item-title v-if="source.dishName">
                 {{ source.dishName }}
                 <span v-if="source.sourceDishId && source.sourceDishId !== source.dishId" class="text-medium-emphasis">
                   ({{ source.sourceDishName }})
                 </span>
               </v-list-item-title>
-              <v-list-item-title v-else-if="source.manual">
-                Manuell hinzugefügt
+              <v-list-item-title v-else-if="source.sourceType === 'manual'">
+                {{ source.isAdjustment ? 'Anpassung' : 'Manuell hinzugefügt' }}
               </v-list-item-title>
-              <v-list-item-subtitle v-if="source.mealDate">
-                {{ formatDate(source.mealDate) }} · {{ source.mealSlot }}
-                <span v-if="source.amount && source.amount !== 0">
-                  · {{ source.amount }} {{ source.unit }}
+              <v-list-item-subtitle>
+                <span v-if="source.mealDate">
+                  {{ formatDate(source.mealDate) }} · {{ source.mealSlot }} ·
+                </span>
+                <span v-if="source.amount !== null && source.amount !== undefined && source.amount !== 0">
+                  {{ source.amount > 0 ? '+' : '' }}{{ source.amount }} {{ source.unit }}
                 </span>
               </v-list-item-subtitle>
             </v-list-item>
@@ -668,10 +672,17 @@ async function clearAllItems() {
       <v-card @keydown.esc="showEditItemDialog = false" @keydown.enter="saveEditedItem">
         <v-card-title>Artikel bearbeiten</v-card-title>
         <v-card-text>
-          <v-text-field v-model="editItem.name" label="Produkt" autofocus class="mb-3" />
+          <!-- Name is shown but not editable (locked) -->
+          <v-text-field
+            v-model="editItem.name"
+            label="Produkt"
+            readonly
+            disabled
+            class="mb-3"
+          />
           <v-row>
             <v-col cols="6">
-              <v-text-field v-model="editItem.amount" label="Menge" type="text" inputmode="decimal" />
+              <v-text-field v-model="editItem.amount" label="Menge" type="text" inputmode="decimal" autofocus />
             </v-col>
             <v-col cols="6">
               <v-combobox v-model="editItem.unit" :items="['Stück', 'g', 'kg', 'ml', 'l', 'Packung', 'Bund', 'Paar']"

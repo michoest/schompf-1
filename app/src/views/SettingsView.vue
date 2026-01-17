@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useAppStore } from '@/stores'
 
 const appStore = useAppStore()
@@ -47,16 +47,21 @@ onMounted(() => {
   }
 })
 
+// Auto-save device user name
+watch(deviceUserName, (newValue) => {
+  localStorage.setItem('deviceUserName', newValue)
+})
+
 // Actions
 function addMealSlot() {
   if (!newSlotName.value.trim()) return
-  
+
   const newSlot = {
     id: `custom-${Date.now()}`,
     name: newSlotName.value.trim(),
     order: mealSlots.value.length
   }
-  
+
   mealSlots.value.push(newSlot)
   showAddSlotDialog.value = false
   newSlotName.value = ''
@@ -68,7 +73,7 @@ function removeMealSlot(slot) {
     appStore.showSnackbar('Mindestens eine Mahlzeit erforderlich', 'warning')
     return
   }
-  
+
   mealSlots.value = mealSlots.value.filter(s => s.id !== slot.id)
   // Reorder
   mealSlots.value.forEach((s, i) => s.order = i)
@@ -78,32 +83,13 @@ function removeMealSlot(slot) {
 function moveSlot(index, direction) {
   const newIndex = index + direction
   if (newIndex < 0 || newIndex >= mealSlots.value.length) return
-  
+
   const temp = mealSlots.value[index]
   mealSlots.value[index] = mealSlots.value[newIndex]
   mealSlots.value[newIndex] = temp
-  
+
   // Update order
   mealSlots.value.forEach((s, i) => s.order = i)
-}
-
-function saveSettings() {
-  // Save device user name to localStorage
-  localStorage.setItem('deviceUserName', deviceUserName.value)
-
-  // Would save other settings to backend
-  appStore.showSnackbar('Einstellungen gespeichert')
-}
-
-function resetToDefaults() {
-  mealSlots.value = [
-    { id: 'breakfast', name: 'Frühstück', order: 0 },
-    { id: 'lunch', name: 'Mittagessen', order: 1 },
-    { id: 'dinner', name: 'Abendessen', order: 2 },
-  ]
-  defaultServings.value = 2
-  defaultFreshnessDays.value = 7
-  appStore.showSnackbar('Standardwerte wiederhergestellt')
 }
 </script>
 
@@ -246,23 +232,6 @@ function resetToDefaults() {
         </p>
       </v-card-text>
     </v-card>
-
-    <!-- Actions -->
-    <div class="d-flex gap-2 flex-wrap">
-      <v-btn
-        color="primary"
-        @click="saveSettings"
-      >
-        <v-icon start icon="mdi-content-save" />
-        Speichern
-      </v-btn>
-      <v-btn
-        variant="outlined"
-        @click="resetToDefaults"
-      >
-        Standardwerte
-      </v-btn>
-    </div>
 
     <!-- Add Slot Dialog -->
     <v-dialog v-model="showAddSlotDialog" max-width="400">

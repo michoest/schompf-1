@@ -54,9 +54,8 @@ const hasMeals = computed(() => props.meals.length > 0)
             </span>
           </div>
 
-          <div class="meal-actions">
+          <div v-if="editingMealId === meal.id" class="meal-actions">
             <v-btn
-              v-if="editingMealId === meal.id"
               icon="mdi-close-circle"
               size="x-small"
               variant="text"
@@ -64,15 +63,6 @@ const hasMeals = computed(() => props.meals.length > 0)
               class="cancel-btn"
               color="primary"
               @click.stop="emit('cancelEdit')"
-            />
-            <v-btn
-              v-else
-              icon="mdi-close"
-              size="x-small"
-              variant="text"
-              density="compact"
-              class="delete-btn"
-              @click.stop="emit('delete', meal)"
             />
           </div>
         </div>
@@ -198,15 +188,6 @@ const hasMeals = computed(() => props.meals.length > 0)
   display: flex;
   align-items: center;
   flex-shrink: 0;
-}
-
-.delete-btn {
-  opacity: 0.6;
-  transition: opacity 0.15s;
-}
-
-.meal-item:hover .delete-btn {
-  opacity: 1;
 }
 
 .cancel-btn {

@@ -1017,7 +1017,7 @@ onUnmounted(() => {
                     <span v-if="dish.ingredientAmount !== null && dish.ingredientAmount !== 0">
                       {{ dish.ingredientAmount }} {{ dish.ingredientUnit }}
                     </span>
-                    <span v-if="dish.ingredientOptional" class="text-medium-emphasis"> (optional)</span>
+                    <v-icon v-if="dish.ingredientOptional" icon="mdi-help-circle" size="small" color="info" class="ml-1" />
                   </v-list-item-subtitle>
                 </v-list-item>
               </v-list>
@@ -1159,6 +1159,7 @@ onUnmounted(() => {
                 rows="6"
                 auto-grow
                 prepend-inner-icon="mdi-book-open-variant"
+                @keydown.enter.stop
               />
             </v-col>
             <v-col cols="12">
@@ -1189,9 +1190,9 @@ onUnmounted(() => {
             <v-list-item v-for="ing in dishForm.ingredients" :key="ing.id" :title="ing.productName">
               <template #subtitle>
                 <span v-if="ing.amount !== null && ing.amount !== 0 && ing.unit !== null">
-                  {{ ing.amount }} {{ ing.unit }}{{ ing.optional ? ' (optional)' : '' }}
+                  {{ ing.amount }} {{ ing.unit }}
                 </span>
-                <span v-else-if="ing.optional">(optional)</span>
+                <v-icon v-if="ing.optional" icon="mdi-help-circle" size="small" color="info" class="ml-1" />
               </template>
 
               <template #prepend>
@@ -1224,7 +1225,8 @@ onUnmounted(() => {
           <v-list v-if="dishForm.subDishes.length > 0" density="compact">
             <v-list-item v-for="sub in dishForm.subDishes" :key="sub.id" :title="getDishName(sub.dishId)">
               <template #subtitle>
-                Faktor: {{ sub.scalingFactor }}{{ sub.optional ? ' (optional)' : '' }}
+                Faktor: {{ sub.scalingFactor }}
+                <v-icon v-if="sub.optional" icon="mdi-help-circle" size="small" color="info" class="ml-1" />
               </template>
 
               <template #prepend>
