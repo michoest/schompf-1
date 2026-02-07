@@ -102,10 +102,10 @@ function formatAmount(amount, unit) {
 
 /**
  * Get unique key for a shopping list item
- * Items are unique by productName (lowercase) + categoryId
+ * Items are unique by productName (lowercase) + categoryId + checked state
  */
-function getItemKey(productName, categoryId) {
-  return `${(productName || '').toLowerCase().trim()}::${categoryId || 'null'}`;
+function getItemKey(productName, categoryId, checked = false) {
+  return `${(productName || '').toLowerCase().trim()}::${categoryId || 'null'}::${checked ? 'checked' : 'unchecked'}`;
 }
 
 /**
@@ -281,10 +281,10 @@ router.post('/generate', async (req, res) => {
       };
     }
 
-    // Build map of existing items by productName+categoryId key
+    // Build map of existing items by productName+categoryId+checked key
     const existingItemsMap = new Map();
     for (const item of db.data.shoppingList.items) {
-      const key = getItemKey(item.productName, item.categoryId);
+      const key = getItemKey(item.productName, item.categoryId, item.checked);
       existingItemsMap.set(key, item);
     }
 
@@ -502,11 +502,11 @@ router.post('/add-item', async (req, res) => {
     }
 
     const finalProductName = product?.name || productName;
-    const key = getItemKey(finalProductName, finalCategoryId);
+    const key = getItemKey(finalProductName, finalCategoryId, false);
 
-    // Check if item with same productName+categoryId already exists
+    // Check if unchecked item with same productName+categoryId already exists
     const existingItem = db.data.shoppingList.items.find(item =>
-      getItemKey(item.productName, item.categoryId) === key
+      getItemKey(item.productName, item.categoryId, item.checked) === key
     );
 
     const newSource = {

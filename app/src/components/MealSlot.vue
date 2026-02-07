@@ -29,7 +29,8 @@ const hasMeals = computed(() => props.meals.length > 0)
           :class="{
             'meal-committed': meal.status === 'committed',
             'meal-prepared': meal.status === 'prepared',
-            'meal-editing': editingMealId === meal.id
+            'meal-editing': editingMealId === meal.id,
+            'meal-takeout': !meal.dishId && meal.dishName && meal.status !== 'committed' && meal.status !== 'prepared'
           }"
           @click="emit('edit', meal)"
         >
@@ -120,6 +121,19 @@ const hasMeals = computed(() => props.meals.length > 0)
 
 .meal-item:hover {
   background: rgba(var(--v-theme-primary), 0.2);
+}
+
+.meal-item.meal-takeout {
+  background: rgba(var(--v-theme-warning), 0.15);
+  border-left: 2px solid rgb(var(--v-theme-warning));
+}
+
+.meal-item.meal-takeout:hover {
+  background: rgba(var(--v-theme-warning), 0.25);
+}
+
+.meal-item.meal-takeout .meal-name {
+  color: rgb(var(--v-theme-warning));
 }
 
 .meal-item.meal-committed {

@@ -102,6 +102,18 @@ const jsonError = ref('')
 // Ingredient search
 const ingredientSearch = ref('')
 
+// Refs for primary input fields (for mobile keyboard focus)
+const vendorNameInput = ref(null)
+const categoryNameInput = ref(null)
+const productNameInput = ref(null)
+const dishNameInput = ref(null)
+const ingredientProductNameInput = ref(null)
+
+function focusInput(inputRef) {
+  const el = inputRef.value?.$el?.querySelector?.('input,textarea')
+  el?.focus({ preventScroll: true })
+}
+
 const commonUnits = ['g', 'kg', 'ml', 'l', 'Stück', 'EL', 'TL', 'Bund', 'Packung', 'Dose', 'Paar']
 const vendorColors = [
   '#10B981', '#0EA5E9', '#8B5CF6', '#F97316',
@@ -320,6 +332,7 @@ function openVendorDialog(vendor = null) {
     vendorForm.value = { name: '', color: '#10B981' }
   }
   showVendorDialog.value = true
+  focusInput(vendorNameInput)
 }
 
 async function saveVendor() {
@@ -363,6 +376,7 @@ function openCategoryDialog(category = null) {
     categoryForm.value = { name: '', vendorId: null }
   }
   showCategoryDialog.value = true
+  focusInput(categoryNameInput)
 }
 
 async function saveCategory() {
@@ -453,6 +467,7 @@ function openProductDialog(product = null) {
     }
   }
   showProductDialog.value = true
+  focusInput(productNameInput)
 }
 
 async function saveProduct() {
@@ -514,6 +529,7 @@ function openDishDialog(dish = null) {
     }
   }
   showDishDialog.value = true
+  focusInput(dishNameInput)
 }
 
 async function saveDish() {
@@ -576,6 +592,7 @@ function openIngredientDialog(ingredient = null) {
     }
   }
   showIngredientDialog.value = true
+  focusInput(ingredientProductNameInput)
 }
 
 function saveIngredient() {
@@ -785,11 +802,11 @@ onUnmounted(() => {
       <!-- Vendors & Categories Tab -->
       <v-window-item value="vendors">
         <div class="d-flex justify-end mb-4 gap-2">
-          <v-btn variant="tonal" color="primary" @click="openCategoryDialog()">
+          <v-btn variant="tonal" color="primary" @pointerdown.prevent="openCategoryDialog()" @touchstart.prevent="openCategoryDialog()">
             <v-icon start icon="mdi-plus" />
             Neue Kategorie
           </v-btn>
-          <v-btn color="primary" @click="openVendorDialog()">
+          <v-btn color="primary" @pointerdown.prevent="openVendorDialog()" @touchstart.prevent="openVendorDialog()">
             <v-icon start icon="mdi-plus" />
             Neuer Händler
           </v-btn>
@@ -881,7 +898,7 @@ onUnmounted(() => {
               <v-icon start icon="mdi-table-edit" />
               Massenbearbeitung
             </v-btn>
-            <v-btn color="primary" @click="openProductDialog()">
+            <v-btn color="primary" @pointerdown.prevent="openProductDialog()" @touchstart.prevent="openProductDialog()">
               <v-icon start icon="mdi-plus" />
               Neues Produkt
             </v-btn>
@@ -936,7 +953,7 @@ onUnmounted(() => {
               <v-icon start icon="mdi-code-json" />
               JSON Import
             </v-btn>
-            <v-btn color="primary" @click="openDishDialog()">
+            <v-btn color="primary" @pointerdown.prevent="openDishDialog()" @touchstart.prevent="openDishDialog()">
               <v-icon start icon="mdi-plus" />
               Neues Gericht
             </v-btn>
@@ -961,6 +978,7 @@ onUnmounted(() => {
                 </div>
                 <div class="text-caption text-medium-emphasis">
                   {{ dish.defaultServings }} Portionen · {{ dish.ingredients?.length || 0 }} Zutaten
+                  <span v-if="dish.subDishes?.length > 0"> · <v-icon icon="mdi-file-tree" size="x-small" class="mr-1" />Untergerichte</span>
                 </div>
               </template>
 
@@ -1045,13 +1063,13 @@ onUnmounted(() => {
     </v-window>
 
     <!-- Vendor Dialog -->
-    <v-dialog v-model="showVendorDialog" max-width="400">
+    <v-dialog v-model="showVendorDialog" max-width="400" eager>
       <v-card @keydown.esc="showVendorDialog = false" @keydown.enter="saveVendor">
         <v-card-title>
           {{ editingVendor ? 'Händler bearbeiten' : 'Neuer Händler' }}
         </v-card-title>
         <v-card-text>
-          <v-text-field v-model="vendorForm.name" label="Name" autofocus class="mb-3" />
+          <v-text-field ref="vendorNameInput" v-model="vendorForm.name" label="Name" autofocus class="mb-3" />
           <div class="text-subtitle-2 mb-2">Farbe</div>
           <div class="d-flex flex-wrap gap-2">
             <v-btn v-for="color in vendorColors" :key="color" :color="color"
@@ -1070,13 +1088,13 @@ onUnmounted(() => {
     </v-dialog>
 
     <!-- Category Dialog -->
-    <v-dialog v-model="showCategoryDialog" max-width="400">
+    <v-dialog v-model="showCategoryDialog" max-width="400" eager>
       <v-card @keydown.esc="showCategoryDialog = false" @keydown.enter="saveCategory">
         <v-card-title>
           {{ editingCategory ? 'Kategorie bearbeiten' : 'Neue Kategorie' }}
         </v-card-title>
         <v-card-text>
-          <v-text-field v-model="categoryForm.name" label="Name" autofocus class="mb-3" />
+          <v-text-field ref="categoryNameInput" v-model="categoryForm.name" label="Name" autofocus class="mb-3" />
           <v-select v-model="categoryForm.vendorId" :items="sortedVendors" item-title="name" item-value="id"
             label="Händler" />
         </v-card-text>
@@ -1089,13 +1107,13 @@ onUnmounted(() => {
     </v-dialog>
 
     <!-- Product Dialog -->
-    <v-dialog v-model="showProductDialog" max-width="500">
+    <v-dialog v-model="showProductDialog" max-width="500" eager>
       <v-card @keydown.esc="showProductDialog = false" @keydown.enter="saveProduct">
         <v-card-title>
           {{ editingProduct ? 'Produkt bearbeiten' : 'Neues Produkt' }}
         </v-card-title>
         <v-card-text>
-          <v-text-field v-model="productForm.name" label="Name" autofocus class="mb-3" />
+          <v-text-field ref="productNameInput" v-model="productForm.name" label="Name" autofocus class="mb-3" />
           <v-select v-model="productForm.categoryId" :items="categoriesWithVendor" item-title="displayName"
             item-value="id" label="Kategorie" clearable class="mb-3" />
           <v-row>
@@ -1117,7 +1135,7 @@ onUnmounted(() => {
     </v-dialog>
 
     <!-- Dish Dialog -->
-    <v-dialog v-model="showDishDialog" max-width="700" scrollable>
+    <v-dialog v-model="showDishDialog" max-width="700" scrollable eager>
       <v-card @keydown.esc="showDishDialog = false" @keydown.enter="saveDish">
         <v-card-title>
           {{ editingDish ? 'Gericht bearbeiten' : 'Neues Gericht' }}
@@ -1128,7 +1146,7 @@ onUnmounted(() => {
 
           <v-row>
             <v-col cols="12" md="6">
-              <v-text-field v-model="dishForm.name" label="Name" autofocus />
+              <v-text-field ref="dishNameInput" v-model="dishForm.name" label="Name" autofocus />
             </v-col>
             <v-col cols="12" md="6">
               <v-text-field v-model="dishForm.recipeUrl" label="Rezept-Link" type="url"
@@ -1180,7 +1198,7 @@ onUnmounted(() => {
             <div class="text-subtitle-2">
               Zutaten ({{ dishForm.ingredients.length }}) — pro Portion
             </div>
-            <v-btn variant="tonal" color="primary" size="small" @click="openIngredientDialog()">
+            <v-btn variant="tonal" color="primary" size="small" @pointerdown.prevent="openIngredientDialog()" @touchstart.prevent="openIngredientDialog()">
               <v-icon start icon="mdi-plus" />
               Zutat hinzufügen
             </v-btn>
@@ -1216,7 +1234,7 @@ onUnmounted(() => {
             <div class="text-subtitle-2">
               Untergerichte ({{ dishForm.subDishes.length }})
             </div>
-            <v-btn variant="tonal" color="primary" size="small" @click="openSubDishDialog()">
+            <v-btn variant="tonal" color="primary" size="small" @pointerdown.prevent="openSubDishDialog()" @touchstart.prevent="openSubDishDialog()">
               <v-icon start icon="mdi-plus" />
               Untergericht hinzufügen
             </v-btn>
@@ -1253,7 +1271,7 @@ onUnmounted(() => {
     </v-dialog>
 
     <!-- Ingredient Dialog -->
-    <v-dialog v-model="showIngredientDialog" max-width="500">
+    <v-dialog v-model="showIngredientDialog" max-width="500" eager>
       <v-card @keydown.esc="showIngredientDialog = false" @keydown.enter="saveIngredient">
         <v-card-title>
           {{ editingIngredient ? 'Zutat bearbeiten' : 'Zutat hinzufügen' }}
@@ -1270,7 +1288,7 @@ onUnmounted(() => {
           </v-autocomplete>
 
           <!-- Manual product name -->
-          <v-text-field v-model="ingredientForm.productName" label="Produktname" :autofocus="!editingIngredient"
+          <v-text-field ref="ingredientProductNameInput" v-model="ingredientForm.productName" label="Produktname" :autofocus="!editingIngredient"
             class="mb-3" hint="Wird automatisch ausgefüllt, wenn ein Produkt ausgewählt wurde" />
 
           <v-row>
@@ -1298,7 +1316,7 @@ onUnmounted(() => {
     </v-dialog>
 
     <!-- SubDish Dialog -->
-    <v-dialog v-model="showSubDishDialog" max-width="500">
+    <v-dialog v-model="showSubDishDialog" max-width="500" eager>
       <v-card @keydown.esc="showSubDishDialog = false" @keydown.enter="saveSubDish">
         <v-card-title>
           {{ editingSubDish ? 'Untergericht bearbeiten' : 'Untergericht hinzufügen' }}

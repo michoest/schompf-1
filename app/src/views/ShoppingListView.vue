@@ -55,28 +55,28 @@ watch(() => newItem.value.name, (name) => {
   }
 })
 
+function focusAddItemInput() {
+  const component = addItemNameInput.value
+  const inputEl = component?.$el?.querySelector?.('input,textarea')
+  if (inputEl) {
+    inputEl.focus({ preventScroll: true })
+  }
+}
+
+function openAddItemDialog() {
+  newItem.value = { name: '', amount: null, unit: '', categoryId: null }
+  userSelectedCategory.value = false
+  showAddItemDialog.value = true
+  // Sync focus for iOS keyboard
+  focusAddItemInput()
+}
+
 watch(showAddItemDialog, (open) => {
   if (open) {
     newItem.value = { name: '', amount: null, unit: '', categoryId: null }
     userSelectedCategory.value = false
-    // Focus the input field after dialog opens with multiple attempts for mobile reliability
-    setTimeout(() => {
-      if (addItemNameInput.value) {
-        const component = addItemNameInput.value
-        const inputEl = component.$el?.querySelector('input')
-
-        if (inputEl) {
-          // Try multiple approaches to ensure focus works on mobile
-          inputEl.focus()
-          inputEl.click()
-
-          // Additional attempt after a short delay
-          setTimeout(() => {
-            inputEl.focus()
-          }, 100)
-        }
-      }
-    }, 350)
+    // Fallback focus after dialog animation
+    setTimeout(() => focusAddItemInput(), 100)
   }
 })
 
@@ -580,10 +580,11 @@ async function clearAllItems() {
 
     <!-- FAB for adding manual items -->
     <v-btn v-if="!shoppingStore.loading" color="accent" icon="mdi-plus" size="large" position="fixed"
-      location="bottom end" class="mb-16 mr-4" elevation="4" @click="showAddItemDialog = true" />
+      location="bottom end" class="mb-16 mr-4" elevation="4"
+      @pointerdown.prevent="openAddItemDialog" @touchstart.prevent="openAddItemDialog" />
 
     <!-- Add item dialog -->
-    <v-dialog v-model="showAddItemDialog" max-width="400">
+    <v-dialog v-model="showAddItemDialog" max-width="400" eager>
       <v-card @keydown.esc="showAddItemDialog = false" @keydown.enter="addManualItem">
         <v-card-title>Artikel hinzufügen</v-card-title>
         <v-card-text>
@@ -668,7 +669,7 @@ async function clearAllItems() {
     </v-dialog>
 
     <!-- Edit item dialog -->
-    <v-dialog v-model="showEditItemDialog" max-width="400">
+    <v-dialog v-model="showEditItemDialog" max-width="400" eager>
       <v-card @keydown.esc="showEditItemDialog = false" @keydown.enter="saveEditedItem">
         <v-card-title>Artikel bearbeiten</v-card-title>
         <v-card-text>

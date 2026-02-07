@@ -33,6 +33,7 @@ const showUncommittedMealSheet = ref(false)
 const showEatingOutMealSheet = ref(false)
 const showEditEatingOutDialog = ref(false)
 const editingEatingOutDescription = ref('')
+const eatingOutDescriptionInput = ref(null)
 const showMoveMealDialog = ref(false)
 const moveToDate = ref(null)
 const moveToSlot = ref(null)
@@ -410,6 +411,8 @@ function openEditEatingOutDialog() {
   editingEatingOutDescription.value = selectedMeal.value.dishName
   showEatingOutMealSheet.value = false
   showEditEatingOutDialog.value = true
+  const el = eatingOutDescriptionInput.value?.$el?.querySelector?.('input,textarea')
+  el?.focus({ preventScroll: true })
 }
 
 async function saveEatingOutDescription() {
@@ -859,11 +862,12 @@ onMounted(() => {
     </v-bottom-sheet>
 
     <!-- Edit eating out description dialog -->
-    <v-dialog v-model="showEditEatingOutDialog" max-width="400">
+    <v-dialog v-model="showEditEatingOutDialog" max-width="400" eager>
       <v-card @keydown.esc="showEditEatingOutDialog = false" @keydown.enter="saveEatingOutDescription">
         <v-card-title>Beschreibung ändern</v-card-title>
         <v-card-text>
           <v-text-field
+            ref="eatingOutDescriptionInput"
             v-model="editingEatingOutDescription"
             label="Beschreibung"
             autofocus
