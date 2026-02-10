@@ -62,7 +62,7 @@ router.get('/date/:date', async (req, res) => {
 // Create meal
 router.post('/', async (req, res) => {
   try {
-    const { date, slotId, slotName, slotOrder, dishId, dishName, servings, notes, subDishes } = req.body;
+    const { date, slotId, slotName, slotOrder, dishId, dishName, servings, notes, subDishes, excludedIngredientIds } = req.body;
     if (!date) {
       return res.status(400).json({ error: 'Datum ist erforderlich' });
     }
@@ -97,6 +97,7 @@ router.post('/', async (req, res) => {
       servings: servings || dish?.defaultServings || db.data.settings.defaultServings,
       notes: notes || null,
       subDishes: validatedSubDishes,
+      excludedIngredientIds: excludedIngredientIds || [],
       status: 'planned', // planned | committed | prepared
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -119,7 +120,7 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Mahlzeit nicht gefunden' });
     }
 
-    const { date, slotId, slotName, slotOrder, dishId, dishName, servings, notes, status, subDishes } = req.body;
+    const { date, slotId, slotName, slotOrder, dishId, dishName, servings, notes, status, subDishes, excludedIngredientIds } = req.body;
 
     // Verify dish exists if changing
     let dish = null;
@@ -155,6 +156,7 @@ router.put('/:id', async (req, res) => {
       servings: servings ?? db.data.meals[index].servings,
       notes: notes !== undefined ? notes : db.data.meals[index].notes,
       subDishes: validatedSubDishes,
+      excludedIngredientIds: excludedIngredientIds !== undefined ? (excludedIngredientIds || []) : (db.data.meals[index].excludedIngredientIds || []),
       status: status !== undefined ? status : (db.data.meals[index].status || (db.data.meals[index].committed ? 'committed' : 'planned')),
       updatedAt: new Date().toISOString()
     };

@@ -28,6 +28,7 @@ const selectedType = ref('all')
 const selectedDish = ref(null)
 const servings = ref(2)
 const selectedSubDishes = ref([]) // Array of { id, dishId, scalingFactor, optional }
+const selectedOptionalIngredients = ref([]) // IDs of optional ingredients the user has checked
 const showEatingOutDialog = ref(false)
 const eatingOutDescription = ref('')
 
@@ -79,6 +80,12 @@ const subDishesWithNames = computed(() => {
   })
 })
 
+// Optional ingredients for the selected dish
+const optionalIngredients = computed(() => {
+  if (!selectedDish.value?.ingredients) return []
+  return selectedDish.value.ingredients.filter(ing => ing.optional)
+})
+
 // New functions:
 function chooseDish(dish) {
   // For "eating out", show description dialog
@@ -99,6 +106,9 @@ function chooseDish(dish) {
   } else {
     selectedSubDishes.value = []
   }
+
+  // Optional ingredients start unchecked
+  selectedOptionalIngredients.value = []
 }
 
 function confirmEatingOut() {
@@ -123,10 +133,16 @@ function confirmSelection() {
     optional: subDish.optional
   }))
 
+  // Determine excluded optional ingredient IDs
+  const excludedIngredientIds = optionalIngredients.value
+    .filter(ing => !selectedOptionalIngredients.value.includes(ing.id))
+    .map(ing => ing.id)
+
   emit('select', {
     dish: selectedDish.value,
     servings: servings.value,
-    subDishes: subDishes
+    subDishes: subDishes,
+    excludedIngredientIds: excludedIngredientIds.length > 0 ? excludedIngredientIds : undefined
   })
   emit('update:modelValue', false)
 }
@@ -162,6 +178,9 @@ watch(() => props.modelValue, (val) => {
     } else {
       selectedSubDishes.value = []
     }
+
+    // Optional ingredients start unchecked
+    selectedOptionalIngredients.value = []
   }
 })
 </script>
@@ -240,6 +259,40 @@ watch(() => props.modelValue, (val) => {
               </template>
             </v-text-field>
 
+            <!-- Optional Ingredients Selection -->
+            <div v-if="optionalIngredients.length > 0" class="mb-4">
+              <div class="text-subtitle-2 text-medium-emphasis mb-2 text-center">
+                Optionale Zutaten
+              </div>
+              <v-list density="compact" class="mx-auto" style="max-width: 400px;">
+                <v-list-item
+                  v-for="ing in optionalIngredients"
+                  :key="ing.id"
+                  class="px-2"
+                >
+                  <template #prepend>
+                    <v-checkbox-btn
+                      :model-value="selectedOptionalIngredients.includes(ing.id)"
+                      @update:model-value="(val) => {
+                        if (val) {
+                          selectedOptionalIngredients.push(ing.id)
+                        } else {
+                          selectedOptionalIngredients = selectedOptionalIngredients.filter(id => id !== ing.id)
+                        }
+                      }"
+                      hide-details
+                    />
+                  </template>
+                  <v-list-item-title>
+                    {{ ing.productName }}
+                  </v-list-item-title>
+                  <v-list-item-subtitle v-if="ing.amount !== null && ing.amount !== 0 && ing.unit !== null">
+                    {{ ing.amount }} {{ ing.unit }} pro Portion
+                  </v-list-item-subtitle>
+                </v-list-item>
+              </v-list>
+            </div>
+
             <!-- SubDishes Selection -->
             <div v-if="subDishesWithNames.length > 0" class="mb-4">
               <div class="text-subtitle-2 text-medium-emphasis mb-2 text-center">
@@ -266,7 +319,7 @@ watch(() => props.modelValue, (val) => {
                   </template>
                   <v-list-item-title>
                     {{ subDish.dishName }}
-                    <v-icon v-if="subDish.optional" icon="mdi-help-circle" size="small" color="info" class="ml-1" />
+                    <v-chip v-if="subDish.optional" size="x-small" variant="outlined" color="info" class="ml-1">optional</v-chip>
                   </v-list-item-title>
                   <v-list-item-subtitle>
                     <v-text-field

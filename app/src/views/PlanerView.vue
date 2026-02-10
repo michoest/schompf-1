@@ -374,7 +374,7 @@ async function showRecipe() {
   }
 }
 
-async function onDishSelected({ dish, servings, subDishes }) {
+async function onDishSelected({ dish, servings, subDishes, excludedIngredientIds }) {
   try {
     if (selectedMeal.value.isNew) {
       await mealsStore.createMeal({
@@ -384,7 +384,8 @@ async function onDishSelected({ dish, servings, subDishes }) {
         dishId: dish?.id || null,
         dishName: dish?.type === 'eating_out' ? dish.name : undefined,
         servings: servings || 2,
-        subDishes: subDishes || []
+        subDishes: subDishes || [],
+        excludedIngredientIds: excludedIngredientIds || undefined
       })
       appStore.showSnackbar('Mahlzeit hinzugefügt')
     } else {
@@ -392,7 +393,8 @@ async function onDishSelected({ dish, servings, subDishes }) {
         dishId: dish?.id || null,
         dishName: dish?.type === 'eating_out' ? dish.name : undefined,
         servings: servings || selectedMeal.value.servings,
-        subDishes: subDishes || []
+        subDishes: subDishes || [],
+        excludedIngredientIds: excludedIngredientIds || undefined
       })
       appStore.showSnackbar('Mahlzeit aktualisiert')
     }

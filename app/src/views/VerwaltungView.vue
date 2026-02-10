@@ -978,11 +978,12 @@ onUnmounted(() => {
                 </div>
                 <div class="text-caption text-medium-emphasis">
                   {{ dish.defaultServings }} Portionen · {{ dish.ingredients?.length || 0 }} Zutaten
-                  <span v-if="dish.subDishes?.length > 0"> · <v-icon icon="mdi-file-tree" size="x-small" class="mr-1" />Untergerichte</span>
+                  <span v-if="dish.subDishes?.length > 0"> · {{ dish.subDishes.length }} Untergericht{{ dish.subDishes.length > 1 ? 'e' : '' }}</span>
                 </div>
               </template>
 
               <template #append>
+                <v-icon v-if="dish.subDishes?.length > 0" icon="mdi-file-tree" size="small" class="mr-2 text-medium-emphasis" />
                 <v-icon v-if="dish.recipe" icon="mdi-book-open-variant" size="small" class="mr-2 text-medium-emphasis" />
                 <v-btn v-if="dish.recipeUrl" icon="mdi-link-variant" variant="text" size="small" color="medium-emphasis" :href="dish.recipeUrl"
                   target="_blank" @click.stop />
@@ -1035,7 +1036,7 @@ onUnmounted(() => {
                     <span v-if="dish.ingredientAmount !== null && dish.ingredientAmount !== 0">
                       {{ dish.ingredientAmount }} {{ dish.ingredientUnit }}
                     </span>
-                    <v-icon v-if="dish.ingredientOptional" icon="mdi-help-circle" size="small" color="info" class="ml-1" />
+                    <v-chip v-if="dish.ingredientOptional" size="x-small" variant="outlined" color="info" class="ml-1">optional</v-chip>
                   </v-list-item-subtitle>
                 </v-list-item>
               </v-list>
@@ -1210,7 +1211,7 @@ onUnmounted(() => {
                 <span v-if="ing.amount !== null && ing.amount !== 0 && ing.unit !== null">
                   {{ ing.amount }} {{ ing.unit }}
                 </span>
-                <v-icon v-if="ing.optional" icon="mdi-help-circle" size="small" color="info" class="ml-1" />
+                <v-chip v-if="ing.optional" size="x-small" variant="outlined" color="info" class="ml-1">optional</v-chip>
               </template>
 
               <template #prepend>
@@ -1244,7 +1245,7 @@ onUnmounted(() => {
             <v-list-item v-for="sub in dishForm.subDishes" :key="sub.id" :title="getDishName(sub.dishId)">
               <template #subtitle>
                 Faktor: {{ sub.scalingFactor }}
-                <v-icon v-if="sub.optional" icon="mdi-help-circle" size="small" color="info" class="ml-1" />
+                <v-chip v-if="sub.optional" size="x-small" variant="outlined" color="info" class="ml-1">optional</v-chip>
               </template>
 
               <template #prepend>

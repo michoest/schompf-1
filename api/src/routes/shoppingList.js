@@ -212,6 +212,7 @@ function collectIngredients(dishId, servingsMultiplier, db, visited = new Set())
   // Add direct ingredients (including optional ones)
   for (const ing of dish.ingredients) {
     ingredients.push({
+      ingredientId: ing.id,
       productId: ing.productId,
       productName: ing.productName,
       amount: ing.amount * servingsMultiplier,
@@ -241,6 +242,7 @@ function collectIngredients(dishId, servingsMultiplier, db, visited = new Set())
  */
 function collectMealIngredients(meal, db) {
   const ingredients = [];
+  const excludedIds = new Set(meal.excludedIngredientIds || []);
 
   // Collect from main dish
   const mainIngredients = collectIngredients(meal.dishId, meal.servings, db);
@@ -257,6 +259,11 @@ function collectMealIngredients(meal, db) {
       );
       ingredients.push(...subIngredients);
     }
+  }
+
+  // Filter out excluded optional ingredients
+  if (excludedIds.size > 0) {
+    return ingredients.filter(ing => !excludedIds.has(ing.ingredientId));
   }
 
   return ingredients;
