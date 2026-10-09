@@ -63,8 +63,7 @@ Ein Haushalt (zwei Personen) plant alle Mahlzeiten; der Einkauf ergibt sich dara
 | Getränke | Rewe | Speisekammer |
 | Drogerie & Haushalt | dm (Merkliste) | – |
 
-**Rewe-Abschnitte** (Lauf-Reihenfolge): 1 Gemüse · 2 Obst · 3 Rest (Trockensortiment) · 4 Wurst/Käse (Kühlregal) · 5 Milch · 6 Wursttheke (Wurst & Schinken, Fleisch) · 7 Süßes · 8 Haushalt · 9 Getränke.
-Offen: Lage von Butter & Eier und Tiefkühl.
+**Rewe-Abschnitte** (Lauf-Reihenfolge): 1 Gemüse · 2 Obst · 3 Rest (Trockensortiment) · 4 Wurst/Käse (Kühlregal) · 5 Milch · 6 Wursttheke (Wurst & Schinken, Fleisch) · 7 Butter (Butter & Eier) · 8 Süßes · 9 Tiefkühl · 10 Haushalt · 11 Getränke.
 
 **Markt**: einzelne Stände, Reihenfolge wie bisher in der App.
 
