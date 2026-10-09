@@ -29,5 +29,5 @@ curl -fsS http://127.0.0.1:3010/health && echo
 REMOTE
 
 (cd app && npx vite build --mode staging --logLevel warn)
-rsync -a --delete app/dist/ pi5:/srv/schompf-dev/
+rsync -a --delete --chmod=D755,F644 app/dist/ pi5:/srv/schompf-dev/
 echo "Dev deployt: $(git log -1 --format='%h %s') → https://schompf-dev.michoest.com"
