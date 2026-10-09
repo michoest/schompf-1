@@ -8,9 +8,10 @@
     "dev:app": "cd app && npm run dev",
     "dev:api": "cd api && npm run dev",
     "install:all": "npm install && cd app && npm install && cd ../api && npm install",
-    "deploy": "cd app && npm run deploy",
+    "deploy": "bash scripts/deploy-app.sh",
     "deploy:api": "bash scripts/deploy-api.sh",
-    "db:pull": "bash scripts/pull-db.sh"
+    "db:pull": "bash scripts/pull-db.sh",
+    "deploy:dev": "bash scripts/deploy-dev.sh"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

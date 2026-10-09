@@ -6,6 +6,8 @@ import { fileURLToPath, URL } from 'node:url'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const appName = env.VITE_APP_NAME || 'Schompf'
+  const themeColor = env.VITE_THEME_COLOR || '#0D9488'
 
   return {
     define: {
@@ -13,14 +15,20 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       vue(),
+      {
+        name: 'html-app-name',
+        transformIndexHtml: html => html
+          .replaceAll('Schompf - Mahlzeitenplanung', `${appName} - Mahlzeitenplanung`)
+          .replaceAll('#0D9488', themeColor)
+      },
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
         manifest: {
-          name: 'Schompf - Mahlzeitenplanung',
-          short_name: 'Schompf',
+          name: `${appName} - Mahlzeitenplanung`,
+          short_name: appName,
           description: 'Plane deine Mahlzeiten und erstelle Einkaufslisten',
-          theme_color: '#0D9488',
+          theme_color: themeColor,
           background_color: '#FFFFFF',
           display: 'standalone',
           scope: '/',

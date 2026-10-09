@@ -10,6 +10,10 @@ Private Mahlzeitenplanungs- und Einkaufslisten-App. Monorepo: `app/` (Vue 3 + Vu
 - Live-Daten: nur `~/dev/schompf-1/api/data/db.json` auf dem Pi (nicht im Git, Repo ist öffentlich).
   Backups: `~/backups/schompf/` auf dem Pi, täglich per Cron + vor jedem API-Deploy, 30 Tage Aufbewahrung.
 - Die API hat keine Authentifizierung.
+- Dev-Instanz: Branch `dev`, Checkout `~/dev/schompf-dev`, PM2 `schompf-dev-api` auf Port 3010 (eigene DB-Kopie),
+  Frontend-Build in `/srv/schompf-dev`; Caddy liefert beides unter `schompf-dev.michoest.com` aus.
+
+Fachliches Zielbild und Etappenplan: `docs/konzept.md`. Produkt- und Gerichtnamen sind auf „Schatzisch“ (Regeln dort bzw. im Review).
 
 ## Entwicklung
 
@@ -19,9 +23,11 @@ Private Mahlzeitenplanungs- und Einkaufslisten-App. Monorepo: `app/` (Vue 3 + Vu
 
 ## Deploy
 
+Gearbeitet wird auf `dev`; `main` = Produktion. `npm run deploy:dev` (optional `-- --refresh-db`) deployt `dev` auf die Dev-Instanz.
+
 1. Backend (bei API-Änderungen zuerst): pushen, dann `npm run deploy:api`.
    API-Änderungen abwärtskompatibel halten – die PWA kann noch eine Weile die alte Frontend-Version aus dem Cache ausliefern.
-2. Frontend: `npm run deploy` (baut und pusht `app/dist` nach `gh-pages`).
+2. Frontend: `npm run deploy` (nur von `main`; baut und pusht `app/dist` nach `gh-pages`).
 
 ## Bugs & Features
 
