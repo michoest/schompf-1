@@ -8,6 +8,6 @@ module.exports = {
         },
         // Restart behavior
         exp_backoff_restart_delay: 100,
-        max_memory_restart: '100M'
+        max_memory_restart: '250M'
     }]
 };

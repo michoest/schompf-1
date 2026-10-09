@@ -30,107 +30,32 @@ Schompf ist eine Web-App zur Mahlzeitenplanung mit automatischer Einkaufslisten-
 ## Projekt-Struktur
 
 ```
-schompf-0/
-├── backend/
-│   ├── src/
-│   │   ├── routes/
-│   │   │   ├── dishes.js
-│   │   │   ├── products.js
-│   │   │   ├── vendors.js
-│   │   │   ├── categories.js
-│   │   │   ├── meals.js
-│   │   │   └── shoppingList.js
-│   │   ├── services/
-│   │   │   └── database.js
-│   │   └── server.js
-│   ├── data/           # Datenbank (wird automatisch erstellt)
-│   ├── package.json
-│   └── .env.example
-│
-└── frontend/
-    ├── src/
-    │   ├── components/
-    │   │   ├── MealSlot.vue
-    │   │   └── DishSelector.vue
-    │   ├── views/
-    │   │   ├── PlanerView.vue
-    │   │   ├── ShoppingListView.vue
-    │   │   ├── DishesView.vue
-    │   │   ├── DishEditView.vue
-    │   │   ├── ProductsView.vue
-    │   │   └── SettingsView.vue
-    │   ├── stores/
-    │   │   └── index.js
-    │   ├── services/
-    │   │   └── api.js
-    │   ├── router/
-    │   │   └── index.js
-    │   ├── plugins/
-    │   │   └── vuetify.js
-    │   ├── App.vue
-    │   ├── main.js
-    │   └── style.css
-    ├── public/
-    │   ├── CNAME
-    │   └── favicon.svg
-    ├── index.html
-    ├── vite.config.js
-    ├── package.json
-    └── .env.example
+schompf-1/
+├── api/        # Express + lowdb Backend (läuft per PM2 auf dem Raspberry Pi)
+├── app/        # Vue 3 + Vuetify PWA (GitHub Pages)
+└── scripts/    # Deploy-, Backup- und DB-Skripte
 ```
 
-## Installation
-
-### Backend (Raspberry Pi)
+## Entwicklung
 
 ```bash
-cd backend
-
-# .env erstellen
-cp .env.example .env
-# Anpassen: PORT, CORS_ORIGINS
-
-# Dependencies installieren
-npm install
-
-# Starten
-npm start
-# oder für Entwicklung:
-npm run dev
+npm run install:all   # einmalig
+npm run db:pull       # Live-Datenbank vom Pi holen (api/data/db.json)
+npm run dev           # API auf :3000, App auf :5173 (auch im WLAN erreichbar)
 ```
 
-### Frontend (Lokal entwickeln)
+## Deploy
 
 ```bash
-cd frontend
-
-# .env erstellen
-cp .env.example .env
-# Anpassen: VITE_API_URL (z.B. http://raspberry-pi:3000)
-
-# Dependencies installieren
-npm install
-
-# Dev Server starten
-npm run dev
+npm run deploy:api    # Backend: DB-Backup, git pull, npm ci, PM2-Neustart auf dem Pi
+npm run deploy        # Frontend: Build + Push nach gh-pages (schompf.michoest.com)
 ```
 
-### Frontend deployen (GitHub Pages)
-
-```bash
-cd frontend
-
-# .env.production erstellen
-echo "VITE_API_URL=https://schompf.server.michoest.com" > .env.production
-echo "VITE_BASE_URL=/" >> .env.production
-
-# Build und Deploy
-npm run deploy
-```
+Details zur Infrastruktur stehen in `CLAUDE.md`.
 
 ## Konfiguration
 
-### Backend (.env)
+### Backend (`api/.env`)
 
 ```env
 PORT=3000
@@ -139,10 +64,11 @@ CORS_ORIGINS=http://localhost:5173,https://schompf.michoest.com
 DB_PATH=./data/db.json
 ```
 
-### Frontend (.env)
+### Frontend (`app/.env`, `app/.env.production`)
 
 ```env
-VITE_API_URL=http://localhost:3000
+VITE_API_URL=                          # leer im Dev-Modus (Vite-Proxy), Produktion: https://schompf-api.michoest.com
+VITE_API_PROXY=http://localhost:3000   # Proxy-Ziel im Dev-Modus
 VITE_BASE_URL=/
 ```
 
