@@ -1,0 +1,44 @@
+{
+  "_hinweis": "Grundstruktur: Lagerorte, Läden mit Abschnitten (Lauf-Reihenfolge), Warengruppen. Siehe docs/konzept.md.",
+  "storageLocations": ["Kühlschrank", "Obstkorb", "Brotkasten", "Speisekammer", "Gewürzregal", "Tiefkühler"],
+  "stores": [
+    { "name": "Markt", "color": "#10B981", "sections": ["Metzger", "Rischkäsetand", "Müsetand", "Käsetand", "Toffeltand"] },
+    { "name": "We", "color": "#EF4444", "sections": ["Müse", "Obst", "Rest", "Wurst/Käse", "Milch", "Eier", "Wursttheke", "Butter", "Süßes", "Tiefkühl", "Haushalt", "Getränke"] },
+    { "name": "Schäfer", "color": "#0EA5E9", "sections": ["Theke"] },
+    { "name": "dm", "color": "#8B5CF6", "sections": ["Alles"] },
+    { "name": "Netto", "color": "#F97316", "sections": ["Alles"] }
+  ],
+  "groups": [
+    { "name": "Gemüse", "storage": "Kühlschrank", "preferred": "Markt", "fallback": "We", "sections": { "Markt": "Müsetand", "We": "Müse" } },
+    { "name": "Salat & frische Kräuter", "storage": "Kühlschrank", "preferred": "Markt", "fallback": "We", "sections": { "Markt": "Müsetand", "We": "Müse" } },
+    { "name": "Pilze", "storage": "Kühlschrank", "preferred": "Markt", "fallback": "We", "sections": { "Markt": "Müsetand", "We": "Müse" } },
+    { "name": "Obst", "storage": "Obstkorb", "preferred": "Markt", "fallback": "We", "sections": { "Markt": "Müsetand", "We": "Obst" } },
+    { "name": "Kartoffeln & Zwiebeln", "storage": "Speisekammer", "preferred": "Markt", "fallback": "We", "sections": { "Markt": "Toffeltand", "We": "Müse" } },
+    { "name": "Brot & Brötchen", "storage": "Brotkasten", "preferred": "Schäfer", "fallback": "We", "sections": { "Schäfer": "Theke", "We": "Rest" } },
+    { "name": "Fleisch", "storage": "Kühlschrank", "preferred": "Markt", "fallback": "We", "sections": { "Markt": "Metzger", "We": "Wursttheke" } },
+    { "name": "Wurst & Schinken", "storage": "Kühlschrank", "preferred": "Markt", "fallback": "We", "sections": { "Markt": "Metzger", "We": "Wursttheke" } },
+    { "name": "Käse", "storage": "Kühlschrank", "preferred": "Markt", "fallback": "We", "sections": { "Markt": "Käsetand", "We": "Wurst/Käse" } },
+    { "name": "Frischkäse & Quark", "storage": "Kühlschrank", "preferred": "Markt", "fallback": "We", "sections": { "Markt": "Rischkäsetand", "We": "Wurst/Käse" } },
+    { "name": "Feinkost", "storage": "Kühlschrank", "preferred": "We", "fallback": null, "sections": { "We": "Wurst/Käse" } },
+    { "name": "Milch, Sahne & Joghurt", "storage": "Kühlschrank", "preferred": "We", "fallback": null, "sections": { "We": "Milch" } },
+    { "name": "Eier", "storage": "Kühlschrank", "preferred": "We", "fallback": null, "sections": { "We": "Eier" } },
+    { "name": "Butter", "storage": "Kühlschrank", "preferred": "We", "fallback": null, "sections": { "We": "Butter" } },
+    { "name": "Tiefkühl", "storage": "Tiefkühler", "preferred": "We", "fallback": null, "sections": { "We": "Tiefkühl" } },
+    { "name": "Nudeln, Reis & Getreide", "storage": "Speisekammer", "preferred": "We", "fallback": null, "sections": { "We": "Rest" } },
+    { "name": "Backzutaten", "storage": "Speisekammer", "preferred": "We", "fallback": null, "sections": { "We": "Rest" } },
+    { "name": "Konserven", "storage": "Speisekammer", "preferred": "We", "fallback": null, "sections": { "We": "Rest" } },
+    { "name": "Öl & Essig", "storage": "Speisekammer", "preferred": "We", "fallback": null, "sections": { "We": "Rest" } },
+    { "name": "Gewürze & Salz", "storage": "Gewürzregal", "preferred": "We", "fallback": null, "sections": { "We": "Rest", "dm": "Alles" } },
+    { "name": "Saucen, Brühe & Würzmittel", "storage": "Speisekammer", "preferred": "We", "fallback": null, "sections": { "We": "Rest" } },
+    { "name": "Nüsse & Saaten", "storage": "Speisekammer", "preferred": "We", "fallback": null, "sections": { "We": "Rest", "dm": "Alles" } },
+    { "name": "Frühstück & Aufstrich", "storage": "Speisekammer", "preferred": "We", "fallback": null, "sections": { "We": "Rest", "dm": "Alles" } },
+    { "name": "Süßes & Snacks", "storage": "Speisekammer", "preferred": "We", "fallback": null, "sections": { "We": "Süßes" } },
+    { "name": "Getränke", "storage": "Speisekammer", "preferred": "We", "fallback": null, "sections": { "We": "Getränke" } },
+    { "name": "Drogerie & Haushalt", "storage": null, "preferred": "dm", "fallback": "We", "sections": { "dm": "Alles", "We": "Haushalt" } }
+  ],
+  "mealSlots": [
+    { "id": "breakfast", "name": "Frühstück", "time": "08:00" },
+    { "id": "lunch", "name": "Mittagessen", "time": "12:00" },
+    { "id": "dinner", "name": "Abendessen", "time": "17:00" }
+  ]
+}
