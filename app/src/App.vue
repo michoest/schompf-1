@@ -1,4 +1,5 @@
 <script setup>
+const isDevInstance = import.meta.env.VITE_APP_NAME === 'Schompf Dev'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores'
@@ -55,6 +56,7 @@ onUnmounted(() => {
 
       <v-app-bar-title class="d-flex align-center justify-center">
         <v-icon icon="mdi-chef-hat" />
+        <v-chip v-if="isDevInstance" size="x-small" variant="flat" color="white" class="ml-2 font-weight-bold">DEV</v-chip>
       </v-app-bar-title>
 
       <!-- Spacer for centering on desktop -->

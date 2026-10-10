@@ -5,14 +5,17 @@ import * as directives from 'vuetify/directives'
 import { aliases, mdi } from 'vuetify/iconsets/mdi'
 import { de } from 'vuetify/locale'
 
+// Dev-Instanz bekommt eigene Farben, damit sie nicht mit der echten App verwechselt wird
+const isDev = import.meta.env.VITE_APP_NAME === 'Schompf Dev'
+
 // Fresh, modern color palette
 const schompfTheme = {
   dark: false,
   colors: {
     // Primary - Teal/Mint
-    primary: '#0D9488',
-    'primary-darken-1': '#0F766E',
-    'primary-lighten-1': '#14B8A6',
+    primary: isDev ? '#C2410C' : '#0D9488',
+    'primary-darken-1': isDev ? '#9A3412' : '#0F766E',
+    'primary-lighten-1': isDev ? '#EA580C' : '#14B8A6',
     
     // Secondary - Cool Blue
     secondary: '#0EA5E9',
@@ -31,7 +34,7 @@ const schompfTheme = {
     info: '#6366F1',
     
     // Background
-    background: '#F0FDFA',
+    background: isDev ? '#FFF7ED' : '#F0FDFA',
     surface: '#FFFFFF',
     'surface-variant': '#F1F5F9',
     
