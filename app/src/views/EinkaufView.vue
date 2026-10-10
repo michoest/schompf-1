@@ -226,7 +226,7 @@ const sourceLabel = s => s.type === 'manual'
         <div class="text-caption text-medium-emphasis">für {{ shortDate(trip.coversFrom) }} – {{ shortDate(trip.coversTo) }}<span v-if="trip.createdBy"> · erstellt von {{ trip.createdBy }}</span></div>
       </div>
       <v-menu>
-        <template #activator="{ props }"><v-btn icon="mdi-dots-horizontal" variant="text" v-bind="props" /></template>
+        <template #activator="{ props }"><v-btn icon="mdi-pencil-outline" variant="text" v-bind="props" aria-label="Einkauf bearbeiten" /></template>
         <v-list density="compact">
           <v-list-item prepend-icon="mdi-calendar-edit" title="Zeitraum ändern" @click="editTrip = trip; tripDialog = true" />
           <v-list-item :prepend-icon="showDone ? 'mdi-eye-off-outline' : 'mdi-eye-outline'" :title="showDone ? 'Erledigte ausblenden' : 'Erledigte zeigen'" @click="showDone = !showDone" />

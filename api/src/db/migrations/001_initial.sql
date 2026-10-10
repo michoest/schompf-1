@@ -105,6 +105,7 @@ CREATE TABLE dish_ingredients (
   amount     REAL,            -- NULL = nach Bedarf (z.B. Salz)
   unit       TEXT NOT NULL,
   optional   INTEGER NOT NULL DEFAULT 0,
+  default_on INTEGER NOT NULL DEFAULT 1,  -- nur bei optional: normalerweise dabei (1) oder nur manchmal (0)
   sort       INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX dish_ingredients_dish ON dish_ingredients(dish_id);
@@ -173,9 +174,11 @@ CREATE TABLE meal_components (
   PRIMARY KEY (meal_id, component_dish_id)
 );
 
-CREATE TABLE meal_excluded_ingredients (
+-- Abweichungen vom Standard optionaler Zutaten pro Mahlzeit (included: 1 = dabei, 0 = weggelassen)
+CREATE TABLE meal_ingredient_choices (
   meal_id       TEXT NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
   ingredient_id TEXT NOT NULL REFERENCES dish_ingredients(id) ON DELETE CASCADE,
+  included      INTEGER NOT NULL,
   PRIMARY KEY (meal_id, ingredient_id)
 );
 

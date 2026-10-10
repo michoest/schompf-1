@@ -23,22 +23,24 @@ beforeEach(() => {
 });
 
 test('Zutatenzeilen lesen', () => {
-  assert.deepEqual(parseIngredientLine('125 g Ghetti'), { productName: 'Ghetti', amount: 125, unit: 'g', optional: false });
-  assert.deepEqual(parseIngredientLine('2 Zehen Blauch'), { productName: 'Blauch', amount: 2, unit: 'Zehe', optional: false });
-  assert.deepEqual(parseIngredientLine('1,5 kg Toffels'), { productName: 'Toffels', amount: 1.5, unit: 'kg', optional: false });
-  assert.deepEqual(parseIngredientLine('1/2 Bund Silie (optional)'), { productName: 'Silie', amount: 0.5, unit: 'Bund', optional: true });
-  assert.deepEqual(parseIngredientLine('Salz'), { productName: 'Salz', amount: null, unit: 'Stück', optional: false });
-  assert.deepEqual(parseIngredientLine('3 Rotten'), { productName: 'Rotten', amount: 3, unit: 'Stück', optional: false });
+  assert.deepEqual(parseIngredientLine('125 g Ghetti'), { productName: 'Ghetti', amount: 125, unit: 'g', optional: false, defaultOn: true });
+  assert.deepEqual(parseIngredientLine('2 Zehen Blauch'), { productName: 'Blauch', amount: 2, unit: 'Zehe', optional: false, defaultOn: true });
+  assert.deepEqual(parseIngredientLine('1,5 kg Toffels'), { productName: 'Toffels', amount: 1.5, unit: 'kg', optional: false, defaultOn: true });
+  assert.deepEqual(parseIngredientLine('1/2 Bund Silie (optional)'), { productName: 'Silie', amount: 0.5, unit: 'Bund', optional: true, defaultOn: true });
+  assert.deepEqual(parseIngredientLine('Rillwurst (optional, aus)'), { productName: 'Rillwurst', amount: null, unit: 'Stück', optional: true, defaultOn: false });
+  assert.deepEqual(parseIngredientLine('Salz'), { productName: 'Salz', amount: null, unit: 'Stück', optional: false, defaultOn: true });
+  assert.deepEqual(parseIngredientLine('3 Rotten'), { productName: 'Rotten', amount: 3, unit: 'Stück', optional: false, defaultOn: true });
   assert.throws(() => parseIngredientLine('(optional)'));
 });
 
 test('Zutatenzeilen schreiben und wieder lesen', () => {
   for (const ing of [
-    { productName: 'Ghetti', amount: 125, unit: 'g', optional: false },
-    { productName: 'Blauch', amount: 1, unit: 'Zehe', optional: false },
-    { productName: 'Blauch', amount: 3, unit: 'Zehe', optional: true },
-    { productName: 'Salz', amount: null, unit: 'Stück', optional: false },
-    { productName: 'Rolle Küchenpapier', amount: 2, unit: 'Stück', optional: false },
+    { productName: 'Ghetti', amount: 125, unit: 'g', optional: false, defaultOn: true },
+    { productName: 'Blauch', amount: 1, unit: 'Zehe', optional: false, defaultOn: true },
+    { productName: 'Blauch', amount: 3, unit: 'Zehe', optional: true, defaultOn: true },
+    { productName: 'Lachs', amount: null, unit: 'Stück', optional: true, defaultOn: false },
+    { productName: 'Salz', amount: null, unit: 'Stück', optional: false, defaultOn: true },
+    { productName: 'Rolle Küchenpapier', amount: 2, unit: 'Stück', optional: false, defaultOn: true },
   ]) {
     assert.deepEqual(parseIngredientLine(formatIngredientLine(ing)), ing);
   }
@@ -54,6 +56,7 @@ test('Gericht speichern, als Datei ausgeben und unverändert zurücklesen', () =
       { productName: 'Hackleisch', amount: 200, unit: 'g' },
       { productName: 'Salz', amount: null, unit: 'Stück' },
       { productName: 'Silie', amount: 0.5, unit: 'Bund', optional: true },
+      { productName: 'Toffels', amount: 100, unit: 'g', optional: true, defaultOn: false },
     ],
     components: [{ dishName: 'Toffellat', factor: 0.5, optional: true }],
     preparations: [{ text: 'Hackleisch auftauen', leadHours: 12 }],

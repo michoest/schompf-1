@@ -287,7 +287,7 @@ function migrateMeals(dishes) {
   const insertMeal = db.prepare(`INSERT INTO meals (id, date, slot_id, sort, kind, dish_id, servings, text, status, created_at, updated_at)
                                  VALUES (@id, @date, @slot_id, @sort, @kind, @dish_id, @servings, @text, @status, @created_at, @updated_at)`);
   const insertComponent = db.prepare('INSERT OR IGNORE INTO meal_components (meal_id, component_dish_id, factor) VALUES (?, ?, ?)');
-  const insertExcluded = db.prepare('INSERT OR IGNORE INTO meal_excluded_ingredients (meal_id, ingredient_id) VALUES (?, ?)');
+  const insertExcluded = db.prepare('INSERT OR IGNORE INTO meal_ingredient_choices (meal_id, ingredient_id, included) VALUES (?, ?, 0)');
   const slots = new Set(structure.mealSlots.map(s => s.id));
   const sortBySlot = new Map();
   const kinds = { dish: 0, leftovers: 0, text: 0 };

@@ -85,7 +85,7 @@ onUnmounted(() => {
       <template #append>
         <v-menu v-model="menu">
           <template #activator="{ props }">
-            <v-btn icon="mdi-dots-vertical" v-bind="props" />
+            <v-btn icon="mdi-cog-outline" v-bind="props" aria-label="Einstellungen und Verwaltung" />
           </template>
           <v-list density="comfortable" min-width="240">
             <v-list-subheader>Verwaltung</v-list-subheader>

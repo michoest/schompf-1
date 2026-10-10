@@ -147,7 +147,8 @@ export function deleteFreeItem(db, id) {
 
 /**
  * Bedarf aus dem Plan: alle Gericht-Mahlzeiten im Zeitraum, Mengen pro Portion × Portionen.
- * Feste Bestandteile zählen immer (einmal), optionale Beilagen nur, wenn bei der Mahlzeit gewählt.
+ * Feste Bestandteile zählen immer (einmal), optionale Beilagen nur, wenn bei der Mahlzeit gewählt;
+ * optionale Zutaten nach Auswahl der Mahlzeit bzw. ihrem Standard („normalerweise dabei“).
  * Ergebnis: Liste von Quellen { productId, amount, unit, mealId, date, slotName, dishName, viaDish }.
  */
 export function collectNeeds(db, from, to) {
@@ -155,23 +156,24 @@ export function collectNeeds(db, from, to) {
                             FROM meals m JOIN dishes d ON d.id = m.dish_id JOIN meal_slots s ON s.id = m.slot_id
                             WHERE m.kind = 'dish' AND d.kind != 'takeaway' AND m.date BETWEEN ? AND ?
                             ORDER BY m.date, s.sort, m.sort`).all(from, to);
-  const ingredientsOf = db.prepare('SELECT id, product_id, amount, unit FROM dish_ingredients WHERE dish_id = ? ORDER BY sort');
+  const ingredientsOf = db.prepare('SELECT id, product_id, amount, unit, optional, default_on FROM dish_ingredients WHERE dish_id = ? ORDER BY sort');
   const componentsOf = db.prepare(`SELECT c.component_dish_id, c.factor, c.optional, d.name, d.kind
                                    FROM dish_components c JOIN dishes d ON d.id = c.component_dish_id WHERE c.dish_id = ? ORDER BY c.sort`);
   const chosenOf = db.prepare(`SELECT mc.component_dish_id, mc.factor, d.name, d.kind
                                FROM meal_components mc JOIN dishes d ON d.id = mc.component_dish_id WHERE mc.meal_id = ?`);
-  const excludedOf = db.prepare('SELECT ingredient_id FROM meal_excluded_ingredients WHERE meal_id = ?').pluck();
+  const choicesOf = db.prepare('SELECT ingredient_id, included FROM meal_ingredient_choices WHERE meal_id = ?');
 
   const sources = [];
   for (const meal of meals) {
-    const excluded = new Set(excludedOf.all(meal.id));
+    const choices = new Map(choicesOf.all(meal.id).map(c => [c.ingredient_id, !!c.included]));
     const base = { mealId: meal.id, date: meal.date, slotName: meal.slot_name, dishName: meal.dish_name };
 
     const visit = (dishId, multiplier, viaDish, visited) => {
       if (visited.has(dishId)) return;
       const seen = new Set(visited).add(dishId);
       for (const ing of ingredientsOf.all(dishId)) {
-        if (excluded.has(ing.id)) continue;
+        // optionale Zutaten: Auswahl der Mahlzeit, sonst Standard der Zutat
+        if (ing.optional && !(choices.get(ing.id) ?? !!ing.default_on)) continue;
         sources.push({ ...base, viaDish, productId: ing.product_id, unit: ing.unit, amount: ing.amount == null ? null : ing.amount * multiplier });
       }
       for (const c of componentsOf.all(dishId)) {

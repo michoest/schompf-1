@@ -11,7 +11,8 @@
  *     - 125 g Ghetti
  *     - 1 Nesepäckchen
  *     - Salz                 # ohne Menge = nach Bedarf
- *     - 50 g Mesan (optional)
+ *     - 50 g Mesan (optional)       # optional, normalerweise dabei
+ *     - Rillwurst (optional, aus)   # optional, nur manchmal dabei
  *   bestandteile:
  *     - Meladenrot mit Ei × 0,5
  *   beilagen:
@@ -94,12 +95,13 @@ export function fileToDish(text) {
   };
 }
 
-/** „125 g Ghetti“, „2 Zehen Blauch“, „Salz“, „1/2 Bund Silie (optional)“ */
+/** „125 g Ghetti“, „2 Zehen Blauch“, „Salz“, „1/2 Bund Silie (optional)“, „Rillwurst (optional, aus)“ */
 export function parseIngredientLine(line) {
   let rest = line.trim();
   let optional = false;
-  const opt = /\s*\(optional\)\s*$/i.exec(rest);
-  if (opt) { optional = true; rest = rest.slice(0, opt.index).trim(); }
+  let defaultOn = true;
+  const opt = /\s*\(optional(?:\s*,\s*(aus|an))?\)\s*$/i.exec(rest);
+  if (opt) { optional = true; defaultOn = opt[1]?.toLowerCase() !== 'aus'; rest = rest.slice(0, opt.index).trim(); }
 
   let amount = null;
   let unit = 'Stück';
@@ -112,11 +114,11 @@ export function parseIngredientLine(line) {
     if (asUnit && others.length) { unit = asUnit; rest = others.join(' '); }
   }
   if (!rest) throw new Error(`zutaten: „${line}“ – Produkt fehlt`);
-  return { productName: rest, amount, unit, optional };
+  return { productName: rest, amount, unit, optional, defaultOn };
 }
 
 export function formatIngredientLine(ing) {
-  const optional = ing.optional ? ' (optional)' : '';
+  const optional = ing.optional ? (ing.defaultOn === false ? ' (optional, aus)' : ' (optional)') : '';
   if (ing.amount == null) return `${ing.productName}${optional}`;
   const unit = getUnit(ing.unit);
   let unitText = '';
