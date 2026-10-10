@@ -50,8 +50,9 @@ beforeEach(() => {
     name: 'Ghetti Nese', servings: 2, ingredients: [
       { productName: 'Ghetti', amount: 125, unit: 'g' },
       { productName: 'Hackleisch', amount: 100, unit: 'g' },
-      { productName: 'Blauch', amount: 0.5, unit: 'Zehe' },
+      { productName: 'Blauch', amount: 0.5, unit: 'Zehe', optional: true },
       { productName: 'Salz', amount: null, unit: 'Stück' },
+      { productName: 'Trone', amount: 1, unit: 'Stück', optional: true, defaultOn: false },
     ],
   }).dish;
   ids.lat = saveDish(db, { name: 'Matenlat', ingredients: [{ productName: 'Maten', amount: 150, unit: 'g' }] }).dish;
@@ -105,10 +106,23 @@ test('Feste Bestandteile einmal, optionale Beilagen nur wenn gewählt, Holen ohn
   assert.deepEqual(maten.map(s => [s.date, s.amount, s.viaDish]), [['2026-10-15', 150, 'Matenlat']], 'Matenlat nur, wo gewählt');
 });
 
-test('Weggelassene optionale Zutat zählt nicht', () => {
-  const blauchIngredient = ids.nese.ingredients.find(i => i.productName === 'Blauch');
-  meal('2026-10-14', ids.nese, { excludedIngredientIds: [blauchIngredient.id] });
-  assert.equal(line(buildTripList(db, trip()), 'Blauch'), undefined);
+test('Optionale Zutaten: Standard an/aus, Auswahl pro Mahlzeit', () => {
+  const blauch = ids.nese.ingredients.find(i => i.productName === 'Blauch');
+  const trone = ids.nese.ingredients.find(i => i.productName === 'Trone');
+  const standard = meal('2026-10-14', ids.nese);
+  let list = buildTripList(db, trip());
+  assert.equal(line(list, 'Blauch').display, '1 Zehe', 'normalerweise dabei');
+  assert.equal(line(list, 'Trone'), undefined, 'nur manchmal dabei → standardmäßig nicht');
+
+  const changed = saveMeal(db, { ingredientChoices: [{ ingredientId: blauch.id, included: false }, { ingredientId: trone.id, included: true }] }, { id: standard.id });
+  assert.deepEqual(changed.ingredientChoices.map(c => c.included).sort(), [false, true]);
+  list = buildTripList(db, trip());
+  assert.equal(line(list, 'Blauch'), undefined);
+  assert.equal(line(list, 'Trone').display, '2');
+
+  // Auswahl gleich dem Standard wird nicht gespeichert
+  const plain = saveMeal(db, { ingredientChoices: [{ ingredientId: blauch.id, included: true }, { ingredientId: trone.id, included: false }] }, { id: standard.id });
+  assert.deepEqual(plain.ingredientChoices, []);
 });
 
 test('Planänderungen wirken sofort (alte Liste: Mengen gelöschter Mahlzeiten blieben stehen)', () => {

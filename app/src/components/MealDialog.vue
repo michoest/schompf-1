@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import api from '@/services/api'
 import { useAppStore, useDataStore } from '@/stores'
-import { formatAmount, formatNumber, shortDate } from '@/utils/format'
+import { formatAmount, formatNumber, shortDate, includedOptionalIds } from '@/utils/format'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -21,7 +21,7 @@ const category = ref(null)
 const dishId = ref(null)
 const servings = ref(2)
 const chosen = ref([])          // gewählte optionale Beilagen (dishIds)
-const excluded = ref([])        // weggelassene optionale Zutaten (ingredientIds)
+const included = ref([])        // optionale Zutaten, die dabei sind (ingredientIds)
 const text = ref('')
 const date = ref(null)
 const slotId = ref(null)
@@ -49,7 +49,7 @@ watch(open, isOpen => {
   dishId.value = m?.dishId ?? null
   servings.value = m?.servings ?? 2
   chosen.value = (m?.components ?? []).map(c => c.dishId)
-  excluded.value = [...(m?.excludedIngredientIds ?? [])]
+  included.value = includedOptionalIds(data.dishById.get(m?.dishId), m)
   text.value = m?.text ?? ''
   date.value = m?.date ?? props.date
   slotId.value = m?.slotId ?? props.slotId
@@ -63,7 +63,7 @@ function chooseDish(d) {
   dishId.value = d.id
   servings.value = props.meal?.dishId === d.id ? props.meal.servings : d.servings
   chosen.value = []
-  excluded.value = []
+  included.value = includedOptionalIds(d, null)
 }
 
 // list ist im Template schon ausgepackt (reaktives Array), daher direkt ändern
@@ -86,7 +86,7 @@ function payload() {
     return {
       ...base, dishId: dishId.value, servings: servings.value,
       components: chosen.value.filter(id => optionalComponents.value.some(c => c.dishId === id)).map(id => ({ dishId: id, factor: factorOf(id) })),
-      excludedIngredientIds: excluded.value.filter(id => optionalIngredients.value.some(i => i.id === id)),
+      ingredientChoices: optionalIngredients.value.map(i => ({ ingredientId: i.id, included: included.value.includes(i.id) })),
     }
   }
   return { ...base, text: text.value.trim() || null }
@@ -192,9 +192,9 @@ async function remove() {
             <div v-if="optionalIngredients.length" class="mb-4">
               <div class="text-subtitle-2 mb-1">Optionale Zutaten</div>
               <div class="chips">
-                <v-chip v-for="i in optionalIngredients" :key="i.id" :color="excluded.includes(i.id) ? undefined : 'primary'"
-                  :variant="excluded.includes(i.id) ? 'outlined' : 'flat'" :class="{ 'text-decoration-line-through': excluded.includes(i.id) }"
-                  @click="toggle(excluded, i.id)">
+                <v-chip v-for="i in optionalIngredients" :key="i.id" :color="included.includes(i.id) ? 'primary' : undefined"
+                  :variant="included.includes(i.id) ? 'flat' : 'outlined'" :prepend-icon="included.includes(i.id) ? 'mdi-check' : undefined"
+                  @click="toggle(included, i.id)">
                   {{ i.productName }}<span v-if="i.amount" class="ml-1 text-caption">{{ formatAmount(i.amount * servings, i.unit, data.units) }}</span>
                 </v-chip>
               </div>

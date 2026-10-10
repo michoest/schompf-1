@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import api from '@/services/api'
 import { useAppStore, useDataStore } from '@/stores'
 import { useLiveStore } from '@/stores/live'
-import { today, addDays, longDate, formatNumber } from '@/utils/format'
+import { today, addDays, longDate, formatNumber, includedOptionalIds } from '@/utils/format'
 
 const router = useRouter()
 const appStore = useAppStore()
@@ -34,7 +34,10 @@ function open(m) {
   if (m.kind !== 'dish') return
   const query = { servings: m.servings }
   if (m.components.length) query.beilagen = m.components.map(c => c.dishId).join(',')
-  if (m.excludedIngredientIds.length) query.ohne = m.excludedIngredientIds.join(',')
+  const dish = data.dishById.get(m.dishId)
+  const included = includedOptionalIds(dish, m)
+  const without = (dish?.ingredients ?? []).filter(i => i.optional && !included.includes(i.id)).map(i => i.id)
+  if (without.length) query.ohne = without.join(',')
   router.push({ path: `/gericht/${m.dishId}`, query })
 }
 
@@ -54,7 +57,7 @@ async function togglePrepared(m) {
         <v-card v-for="m in mealsFor(date, slot.id)" :key="m.id" class="mb-2" :class="{ prepared: m.status === 'prepared' }" @click="open(m)">
           <v-card-text class="d-flex align-center py-3">
             <div class="flex-grow-1">
-              <div class="text-caption text-medium-emphasis">{{ slot.name }} · {{ slot.time }}</div>
+              <div class="text-caption text-medium-emphasis">{{ slot.name }}</div>
               <div :class="index === 0 ? 'text-h6' : 'text-subtitle-1'">{{ label(m) }}</div>
               <div v-if="m.components.length" class="text-caption">mit {{ m.components.map(c => c.dishName).join(', ') }}</div>
               <div v-if="m.kind === 'dish' && m.dishKind !== 'takeaway'" class="text-caption text-medium-emphasis">{{ formatNumber(m.servings) }} Portionen</div>

@@ -15,8 +15,12 @@ const SELECT = `SELECT m.id, m.date, m.slot_id AS slotId, m.sort, m.kind, m.dish
 function withDetails(db, meals) {
   const components = db.prepare(`SELECT mc.component_dish_id AS dishId, d.name AS dishName, mc.factor
                                   FROM meal_components mc JOIN dishes d ON d.id = mc.component_dish_id WHERE mc.meal_id = ?`);
-  const excluded = db.prepare('SELECT ingredient_id FROM meal_excluded_ingredients WHERE meal_id = ?').pluck();
-  return meals.map(m => ({ ...m, components: components.all(m.id), excludedIngredientIds: excluded.all(m.id) }));
+  const choices = db.prepare('SELECT ingredient_id AS ingredientId, included FROM meal_ingredient_choices WHERE meal_id = ?');
+  return meals.map(m => ({
+    ...m,
+    components: components.all(m.id),
+    ingredientChoices: choices.all(m.id).map(c => ({ ingredientId: c.ingredientId, included: !!c.included })),
+  }));
 }
 
 export function listMeals(db, { from, to } = {}) {
@@ -32,7 +36,8 @@ export function getMeal(db, id) {
 
 /**
  * Mahlzeit anlegen oder ändern. Bei Änderungen dürfen einzelne Felder fehlen.
- * Beilagen kommen als [{ dishId, factor }], weggelassene Zutaten als Liste von Zutat-IDs.
+ * Beilagen kommen als [{ dishId, factor }], die Auswahl optionaler Zutaten als [{ ingredientId, included }]
+ * (gespeichert wird nur, was vom Standard der Zutat abweicht).
  */
 export function saveMeal(db, input, { id = null, personId = null } = {}) {
   return db.transaction(() => {
@@ -61,9 +66,16 @@ export function saveMeal(db, input, { id = null, personId = null } = {}) {
     for (const c of components) {
       if (!db.prepare('SELECT 1 FROM dishes WHERE id = ?').get(c.dishId)) errors.push('Beilage unbekannt');
     }
-    const excluded = merged.kind === 'dish' ? (merged.excludedIngredientIds ?? []) : [];
-    for (const ingredientId of excluded) {
-      if (!db.prepare('SELECT 1 FROM dish_ingredients WHERE id = ?').get(ingredientId)) errors.push('Weggelassene Zutat unbekannt');
+    const choices = [];
+    if (merged.kind === 'dish') {
+      const requested = merged.ingredientChoices
+        ?? (merged.excludedIngredientIds ?? []).map(ingredientId => ({ ingredientId, included: false }));
+      for (const choice of requested) {
+        const ing = db.prepare('SELECT optional, default_on FROM dish_ingredients WHERE id = ?').get(choice.ingredientId);
+        if (!ing) { errors.push('Zutat in der Auswahl unbekannt'); continue; }
+        if (!ing.optional) continue;
+        if (!!choice.included !== !!ing.default_on) choices.push({ ingredientId: choice.ingredientId, included: choice.included ? 1 : 0 });
+      }
     }
     if (errors.length) throw new ValidationError(errors);
 
@@ -86,9 +98,9 @@ export function saveMeal(db, input, { id = null, personId = null } = {}) {
     for (const c of components) {
       db.prepare('INSERT OR REPLACE INTO meal_components (meal_id, component_dish_id, factor) VALUES (?, ?, ?)').run(row.id, c.dishId, Number(c.factor ?? 1));
     }
-    db.prepare('DELETE FROM meal_excluded_ingredients WHERE meal_id = ?').run(row.id);
-    for (const ingredientId of excluded) {
-      db.prepare('INSERT OR IGNORE INTO meal_excluded_ingredients (meal_id, ingredient_id) VALUES (?, ?)').run(row.id, ingredientId);
+    db.prepare('DELETE FROM meal_ingredient_choices WHERE meal_id = ?').run(row.id);
+    for (const c of choices) {
+      db.prepare('INSERT OR REPLACE INTO meal_ingredient_choices (meal_id, ingredient_id, included) VALUES (?, ?, ?)').run(row.id, c.ingredientId, c.included);
     }
     return getMeal(db, row.id);
   })();

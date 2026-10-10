@@ -36,10 +36,10 @@ function toDocument(db, row) {
     takeawayWhere: row.takeaway_where,
     recipe: row.recipe,
     categories: db.prepare('SELECT category FROM dish_categories WHERE dish_id = ? ORDER BY category').all(row.id).map(r => r.category),
-    ingredients: db.prepare(`SELECT i.id, i.product_id, p.name AS product_name, i.amount, i.unit, i.optional
+    ingredients: db.prepare(`SELECT i.id, i.product_id, p.name AS product_name, i.amount, i.unit, i.optional, i.default_on
                              FROM dish_ingredients i JOIN products p ON p.id = i.product_id
                              WHERE i.dish_id = ? ORDER BY i.sort`).all(row.id)
-      .map(i => ({ id: i.id, productId: i.product_id, productName: i.product_name, amount: i.amount, unit: i.unit, optional: !!i.optional })),
+      .map(i => ({ id: i.id, productId: i.product_id, productName: i.product_name, amount: i.amount, unit: i.unit, optional: !!i.optional, defaultOn: !!i.default_on })),
     components: db.prepare(`SELECT c.component_dish_id, d.name, c.factor, c.optional
                             FROM dish_components c JOIN dishes d ON d.id = c.component_dish_id
                             WHERE c.dish_id = ? ORDER BY c.sort`).all(row.id)
@@ -54,7 +54,7 @@ function toDocument(db, row) {
 /**
  * Gericht anlegen oder ersetzen. Zutaten/Beilagen dürfen per ID oder Name auf
  * Produkte/Gerichte verweisen. Bestehende Zutaten behalten ihre ID, wenn das Produkt
- * gleich bleibt (damit weggelassene optionale Zutaten in Mahlzeiten erhalten bleiben).
+ * gleich bleibt (damit die Auswahl optionaler Zutaten in Mahlzeiten erhalten bleibt).
  * Jede Änderung wird mit Zusammenfassung in dish_changes protokolliert.
  *
  * ctx: { source: 'app'|'import'|'claude', personId?, createProducts?: boolean }
@@ -87,12 +87,12 @@ export function saveDish(db, input, ctx = {}) {
     doc.ingredients.forEach((ing, sort) => {
       let ingId = reusable.get(ing.productId);
       if (ingId && !kept.has(ingId)) {
-        db.prepare('UPDATE dish_ingredients SET amount=?, unit=?, optional=?, sort=? WHERE id=?')
-          .run(ing.amount, ing.unit, ing.optional ? 1 : 0, sort, ingId);
+        db.prepare('UPDATE dish_ingredients SET amount=?, unit=?, optional=?, default_on=?, sort=? WHERE id=?')
+          .run(ing.amount, ing.unit, ing.optional ? 1 : 0, ing.defaultOn ? 1 : 0, sort, ingId);
       } else {
         ingId = newId();
-        db.prepare('INSERT INTO dish_ingredients (id, dish_id, product_id, amount, unit, optional, sort) VALUES (?, ?, ?, ?, ?, ?, ?)')
-          .run(ingId, id, ing.productId, ing.amount, ing.unit, ing.optional ? 1 : 0, sort);
+        db.prepare('INSERT INTO dish_ingredients (id, dish_id, product_id, amount, unit, optional, default_on, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(ingId, id, ing.productId, ing.amount, ing.unit, ing.optional ? 1 : 0, ing.defaultOn ? 1 : 0, sort);
       }
       kept.add(ingId);
     });
@@ -157,7 +157,7 @@ function validate(db, input, before, ctx) {
     if (!unit) errors.push(`Zutat „${product.name}“: Einheit „${ing.unit}“ unbekannt`);
     const amount = ing.amount == null || ing.amount === '' ? null : Number(ing.amount);
     if (amount != null && !(amount > 0)) errors.push(`Zutat „${product.name}“: Menge „${ing.amount}“ ungültig`);
-    return { productId: product.id, amount, unit, optional: !!ing.optional };
+    return { productId: product.id, amount, unit, optional: !!ing.optional, defaultOn: ing.optional ? ing.defaultOn !== false : true };
   }).filter(Boolean);
   if (kind === 'takeaway' && ingredients.length) errors.push('Holen-Gerichte haben keine Zutaten');
   const products = ingredients.map(i => i.productId);
@@ -219,7 +219,7 @@ export function describeChanges(before, after) {
   if ((before.recipe ?? '') !== (after.recipe ?? '')) parts.push('Rezept geändert');
   if (before.categories.join() !== after.categories.join()) parts.push(`Kategorien: ${after.categories.join(', ') || '–'}`);
 
-  const show = i => `${formatAmount(i.amount, i.unit)}${i.optional ? ' (optional)' : ''}`;
+  const show = i => `${formatAmount(i.amount, i.unit)}${i.optional ? (i.defaultOn ? ' (optional)' : ' (optional, aus)') : ''}`;
   const oldIngredients = new Map(before.ingredients.map(i => [i.productId, i]));
   for (const ing of after.ingredients) {
     const old = oldIngredients.get(ing.productId);

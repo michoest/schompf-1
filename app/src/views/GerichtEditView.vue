@@ -34,14 +34,19 @@ onMounted(async () => {
   form.value = {
     ...dish,
     servings: dish.servings,
-    ingredients: dish.ingredients.map(i => ({ productName: i.productName, amount: i.amount == null ? '' : formatNumber(i.amount), unit: i.unit, optional: i.optional })),
+    ingredients: dish.ingredients.map(i => ({ productName: i.productName, amount: i.amount == null ? '' : formatNumber(i.amount), unit: i.unit, need: i.optional ? (i.defaultOn ? 'usually' : 'sometimes') : 'always' })),
     components: dish.components.map(c => ({ dishId: c.dishId, factor: formatNumber(c.factor), optional: c.optional })),
     preparations: dish.preparations.map(p => ({ text: p.text, leadHours: formatNumber(p.leadHours) })),
   }
   changes.value = await api.dishChanges(dish.id)
 })
 
-function addIngredient() { form.value.ingredients.push({ productName: '', amount: '', unit: 'Stück', optional: false }) }
+function addIngredient() { form.value.ingredients.push({ productName: '', amount: '', unit: 'Stück', need: 'always' }) }
+const needOptions = [
+  { value: 'always', title: 'immer' },
+  { value: 'usually', title: 'optional, meist dabei' },
+  { value: 'sometimes', title: 'optional, manchmal' },
+]
 function addComponent() { form.value.components.push({ dishId: null, factor: '1', optional: true }) }
 function addPreparation() { form.value.preparations.push({ text: '', leadHours: '12' }) }
 
@@ -57,7 +62,7 @@ async function save() {
     name: f.name, kind: f.kind, status: f.status, servings: parseNumber(f.servings),
     categories: f.categories, sourceUrl: f.sourceUrl || null, takeawayWhere: f.takeawayWhere || null, recipe: f.recipe || null,
     ingredients: f.kind === 'takeaway' ? [] : f.ingredients.filter(i => i.productName)
-      .map(i => ({ productName: i.productName, amount: parseNumber(i.amount), unit: i.unit, optional: i.optional })),
+      .map(i => ({ productName: i.productName, amount: parseNumber(i.amount), unit: i.unit, optional: i.need !== 'always', defaultOn: i.need !== 'sometimes' })),
     components: f.components.filter(c => c.dishId).map(c => ({ dishId: c.dishId, factor: parseNumber(c.factor), optional: c.optional })),
     preparations: f.preparations.filter(p => p.text).map(p => ({ text: p.text, leadHours: parseNumber(p.leadHours) })),
   }
@@ -109,11 +114,11 @@ async function remove() {
             <v-text-field v-model="ing.amount" placeholder="Menge" inputmode="decimal" density="compact" hide-details style="max-width: 100px" />
             <v-select v-model="ing.unit" :items="data.units" item-title="singular" item-value="code" density="compact" hide-details style="max-width: 140px" />
             <v-spacer />
-            <v-btn :icon="ing.optional ? 'mdi-help-circle' : 'mdi-help-circle-outline'" size="small" variant="text" :color="ing.optional ? 'primary' : undefined" title="optional" @click="ing.optional = !ing.optional" />
+            <v-select v-model="ing.need" :items="needOptions" density="compact" hide-details class="need" />
             <v-btn icon="mdi-close" size="small" variant="text" @click="form.ingredients.splice(i, 1)" />
           </div>
         </div>
-        <p class="text-caption text-medium-emphasis">Menge leer = nach Bedarf. <v-icon icon="mdi-help-circle" size="x-small" /> = optional. Neue Produkte zuerst unter „Produkte“ anlegen.</p>
+        <p class="text-caption text-medium-emphasis">Menge leer = nach Bedarf. Optionale Zutaten wählt man beim Planen ab oder dazu. Neue Produkte zuerst unter „Produkte“ anlegen.</p>
         <v-btn variant="tonal" size="small" prepend-icon="mdi-plus" class="mt-2" @click="addIngredient">Zutat</v-btn>
       </v-card-text>
     </v-card>
@@ -173,4 +178,6 @@ async function remove() {
 
 <style scoped>
 .ingredient { border-left: 3px solid rgba(var(--v-theme-primary), 0.3); padding-left: 8px; }
+.need { max-width: 120px; }
+.need :deep(.v-select__selection-text) { font-size: 0.8rem; }
 </style>

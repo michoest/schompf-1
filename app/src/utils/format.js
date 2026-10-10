@@ -71,3 +71,9 @@ export function parseNumber(text) {
   }
   return t === '' ? null : Number(t)
 }
+
+/** IDs der optionalen Zutaten, die bei einer Mahlzeit dabei sind (Standard der Zutat, überschrieben durch die Auswahl). */
+export function includedOptionalIds(dish, meal) {
+  const choices = new Map((meal?.ingredientChoices ?? []).map(c => [c.ingredientId, c.included]))
+  return (dish?.ingredients ?? []).filter(i => i.optional && (choices.get(i.id) ?? i.defaultOn)).map(i => i.id)
+}
