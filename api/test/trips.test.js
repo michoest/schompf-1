@@ -89,7 +89,7 @@ test('Mengen pro Portion × Portionen, Einheiten werden zusammengefasst', () => 
 test('„nach Bedarf“ verschwindet neben bezifferten Mengen', () => {
   const zucker = saveDish(db, { name: 'Zuckerzeug', ingredients: [{ productName: 'Salz', amount: 70, unit: 'g' }] }).dish;
   meal('2026-10-14', ids.nese);
-  meal('2026-10-15', zucker);
+  meal('2026-10-15', zucker, { servings: 1 });
   assert.equal(line(buildTripList(db, trip()), 'Salz').display, '70 g');
 });
 
