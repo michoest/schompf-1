@@ -233,11 +233,24 @@ function migrateDishes(products) {
     }
     if (kind === 'takeaway') continue; // Holen-Gerichte haben keine Zutaten
 
-    (d.ingredients ?? []).forEach((ing, i) => {
+    // Gleiches Produkt mehrfach (z.B. Rote + Gelbe Tailmaten → Tailmaten): Mengen addieren
+    const merged = new Map();
+    for (const ing of d.ingredients ?? []) {
       const productId = resolveProduct(ing, products, name);
       const unit = normalizeUnit(ing.unit);
       if (!unit) warn(`Zutat „${ing.productName}“ in ${name}: unbekannte Einheit „${ing.unit}“ übernommen`);
-      insertIngredient.run(ing.id, d.id, productId, parseAmount(ing.amount), unit ?? ing.unit, ing.optional ? 1 : 0, i);
+      const amount = parseAmount(ing.amount);
+      const existing = merged.get(productId);
+      if (!existing) { merged.set(productId, { id: ing.id, productId, amount, unit: unit ?? ing.unit, optional: !!ing.optional }); continue; }
+      if (existing.unit !== (unit ?? ing.unit) || existing.optional !== !!ing.optional) {
+        warn(`Zutat „${ing.productName}“ in ${name}: doppelt mit anderer Einheit – zweiter Eintrag verworfen`);
+        continue;
+      }
+      existing.amount = existing.amount == null || amount == null ? (existing.amount ?? amount) : existing.amount + amount;
+      warn(`Zutat „${ing.productName}“ in ${name}: mit gleichem Produkt zusammengeführt`);
+    }
+    [...merged.values()].forEach((ing, i) => {
+      insertIngredient.run(ing.id, d.id, ing.productId, ing.amount, ing.unit, ing.optional ? 1 : 0, i);
       ingredientIds.add(ing.id);
     });
   }
