@@ -1,205 +1,146 @@
 <script setup>
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useAppStore, useSessionStore, useDataStore } from '@/stores'
+import { useLiveStore } from '@/stores/live'
+import { setUnauthorizedHandler } from '@/services/api'
+
 const isDevInstance = import.meta.env.VITE_APP_NAME === 'Schompf Dev'
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
-import { useAppStore } from '@/stores'
-
 const route = useRoute()
+const router = useRouter()
 const appStore = useAppStore()
+const session = useSessionStore()
+const data = useDataStore()
+const live = useLiveStore()
 
-const drawer = ref(true)
-const rail = ref(true)
 const windowWidth = ref(window.innerWidth)
+const isMobile = computed(() => windowWidth.value < 960)
+const menu = ref(false)
 
-const navItems = [
-  { title: 'Planer', icon: 'mdi-calendar', to: '/planer' },
-  { title: 'Einkaufsliste', icon: 'mdi-cart', to: '/einkaufsliste' },
-  { title: 'Verwaltung', icon: 'mdi-database-cog', to: '/verwaltung' },
-  { title: 'Einstellungen', icon: 'mdi-cog', to: '/einstellungen' },
+const mainNav = [
+  { title: 'Heute', icon: 'mdi-silverware-fork-knife', to: '/heute' },
+  { title: 'Plan', icon: 'mdi-calendar-week', to: '/plan' },
+  { title: 'Einkauf', icon: 'mdi-cart-outline', to: '/einkauf' },
+]
+const adminNav = [
+  { title: 'Gerichte', icon: 'mdi-book-open-variant', to: '/verwaltung/gerichte' },
+  { title: 'Produkte', icon: 'mdi-food-apple-outline', to: '/verwaltung/produkte' },
+  { title: 'Läden & Warengruppen', icon: 'mdi-store-outline', to: '/verwaltung/laeden' },
 ]
 
-const currentTitle = computed(() => {
-  return route.meta?.title || 'Schompf'
+const title = computed(() => route.meta?.title || 'Schompf')
+const showChrome = computed(() => !route.meta?.public)
+
+function onResize() { windowWidth.value = window.innerWidth }
+function onVisibility() { if (document.visibilityState === 'visible' && session.loggedIn) live.resume() }
+
+async function startSession() {
+  try {
+    await Promise.all([session.load(), data.load()])
+    live.start()
+  } catch (e) {
+    if (e.status !== 401) appStore.showError(e, 'Server nicht erreichbar')
+  }
+}
+
+function logout() {
+  live.stop()
+  session.logout()
+  router.push('/login')
+}
+
+setUnauthorizedHandler(() => {
+  live.stop()
+  session.logout()
+  if (route.name !== 'login') router.push({ name: 'login', query: { next: route.fullPath } })
 })
 
-const isMobile = computed(() => windowWidth.value < 960)
-
-function onResize() {
-  windowWidth.value = window.innerWidth
-}
+watch(() => session.loggedIn, loggedIn => { if (loggedIn) startSession() })
 
 onMounted(() => {
   window.addEventListener('resize', onResize)
+  document.addEventListener('visibilitychange', onVisibility)
+  if (session.loggedIn) startSession()
 })
-
 onUnmounted(() => {
   window.removeEventListener('resize', onResize)
+  document.removeEventListener('visibilitychange', onVisibility)
+  live.stop()
 })
 </script>
 
 <template>
   <v-app>
-    <!-- Safe area background for top -->
     <div class="safe-area-bg" />
 
-    <!-- App Bar -->
-    <v-app-bar
-      color="primary"
-      density="comfortable"
-      elevation="0"
-      class="safe-area-top"
-    >
-      <v-app-bar-nav-icon
-        v-if="!isMobile"
-        @click="rail = !rail"
-      />
-
-      <v-app-bar-title class="d-flex align-center justify-center">
-        <v-icon icon="mdi-chef-hat" />
+    <v-app-bar v-if="showChrome" color="primary" elevation="0" density="comfortable" class="safe-area-top">
+      <template #prepend>
+        <v-btn v-if="route.meta?.back" icon="mdi-arrow-left" @click="router.back()" />
+        <v-icon v-else icon="mdi-chef-hat" class="ml-3" />
+      </template>
+      <v-app-bar-title>
+        {{ title }}
         <v-chip v-if="isDevInstance" size="x-small" variant="flat" color="white" class="ml-2 font-weight-bold">DEV</v-chip>
       </v-app-bar-title>
-
-      <!-- Spacer for centering on desktop -->
-      <template v-if="!isMobile" #append>
-        <div style="width: 48px;"></div>
+      <template #append>
+        <v-menu v-model="menu">
+          <template #activator="{ props }">
+            <v-btn icon="mdi-dots-vertical" v-bind="props" />
+          </template>
+          <v-list density="comfortable" min-width="240">
+            <v-list-subheader>Verwaltung</v-list-subheader>
+            <v-list-item v-for="item in adminNav" :key="item.to" :to="item.to" :prepend-icon="item.icon" :title="item.title" />
+            <v-divider class="my-1" />
+            <v-list-item prepend-icon="mdi-account" :title="session.person?.name ?? 'Angemeldet'" :subtitle="session.device?.name" />
+            <v-list-item prepend-icon="mdi-logout" title="Abmelden" @click="logout" />
+          </v-list>
+        </v-menu>
       </template>
     </v-app-bar>
 
-    <!-- Navigation Drawer (Desktop only) -->
-    <v-navigation-drawer
-      v-if="!isMobile"
-      v-model="drawer"
-      :rail="rail"
-      permanent
-      color="surface"
-    >
-      <v-list 
-        density="comfortable" 
-        nav
-        class="pa-2"
-      >
-        <v-list-item
-          v-for="item in navItems"
-          :key="item.to"
-          :to="item.to"
-          :prepend-icon="item.icon"
-          :title="item.title"
-          rounded="lg"
-          color="primary"
-          class="mb-1"
-        />
+    <v-navigation-drawer v-if="showChrome && !isMobile" permanent rail expand-on-hover color="surface">
+      <v-list density="comfortable" nav>
+        <v-list-item v-for="item in mainNav" :key="item.to" :to="item.to" :prepend-icon="item.icon" :title="item.title" color="primary" />
+        <v-divider class="my-2" />
+        <v-list-item v-for="item in adminNav" :key="item.to" :to="item.to" :prepend-icon="item.icon" :title="item.title" color="primary" />
       </v-list>
-
-      <template #append>
-        <div class="pa-2">
-          <v-btn
-            :icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
-            variant="text"
-            size="small"
-            @click="rail = !rail"
-            block
-          />
-        </div>
-      </template>
     </v-navigation-drawer>
 
-    <!-- Main Content -->
-    <v-main class="bg-background" :class="{ 'main-mobile': isMobile }">
-      <v-container fluid class="pa-4" :class="{ 'container-mobile': isMobile }">
-        <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
+    <v-main class="bg-background" :class="{ 'main-mobile': isMobile && showChrome }">
+      <v-container fluid class="pa-3 page mx-auto" :class="{ 'container-mobile': isMobile && showChrome }">
+        <router-view />
       </v-container>
     </v-main>
 
-    <!-- Bottom Navigation (Mobile only) -->
-    <v-bottom-navigation
-      v-if="isMobile"
-      grow
-      color="primary"
-      elevation="8"
-      fixed
-      class="safe-area-bottom"
-    >
-      <v-btn 
-        v-for="item in navItems.slice(0, 5)" 
-        :key="item.to"
-        :to="item.to"
-      >
+    <v-bottom-navigation v-if="showChrome && isMobile" grow color="primary" elevation="8" class="safe-area-bottom">
+      <v-btn v-for="item in mainNav" :key="item.to" :to="item.to">
         <v-icon>{{ item.icon }}</v-icon>
         <span class="text-caption mt-1">{{ item.title }}</span>
       </v-btn>
     </v-bottom-navigation>
 
-    <!-- Global Snackbar -->
-    <v-snackbar
-      v-model="appStore.snackbar.show"
-      :color="appStore.snackbar.color"
-      :timeout="3000"
-      location="top"
-    >
+    <v-snackbar v-model="appStore.snackbar.show" :color="appStore.snackbar.color" :timeout="3500" location="top">
       {{ appStore.snackbar.message }}
       <template #actions>
-        <v-btn
-          variant="text"
-          @click="appStore.hideSnackbar()"
-        >
-          Schließen
-        </v-btn>
+        <v-btn variant="text" @click="appStore.hideSnackbar()">OK</v-btn>
       </template>
     </v-snackbar>
   </v-app>
 </template>
 
 <style>
-/* Safe area support for PWA */
 .safe-area-bg {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
+  position: fixed; top: 0; left: 0; right: 0;
   height: env(safe-area-inset-top);
   background: rgb(var(--v-theme-primary));
   z-index: 1000;
 }
-
-.safe-area-top {
-  padding-top: env(safe-area-inset-top) !important;
-}
-
+.safe-area-top { padding-top: env(safe-area-inset-top) !important; }
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom) !important;
   height: calc(56px + env(safe-area-inset-bottom)) !important;
 }
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.15s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
-/* Mobile-specific spacing */
-.main-mobile {
-  /* Add padding for app-bar height + safe area at top */
-  padding-top: calc(56px + env(safe-area-inset-top)) !important;
-}
-
-.container-mobile {
-  /* Remove top padding on mobile - sticky elements handle their own spacing */
-  padding-top: 0 !important;
-  /* Bottom padding = bottom nav height + safe area */
-  padding-bottom: calc(56px + env(safe-area-inset-bottom)) !important;
-}
-
-/* FAB spacing for mobile - used in individual views */
-.v-btn.mb-16 {
-  /* Position above bottom nav: base height (56px) + safe area + extra spacing (32px) */
-  margin-bottom: calc(88px + env(safe-area-inset-bottom)) !important;
-}
+.main-mobile { padding-top: calc(56px + env(safe-area-inset-top)) !important; }
+.container-mobile { padding-bottom: calc(72px + env(safe-area-inset-bottom)) !important; }
+.page { max-width: 900px; }
 </style>
