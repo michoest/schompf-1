@@ -4,7 +4,7 @@
  * Wiederholbar: erzeugt die Zieldatei jedes Mal neu (mit --force wird eine vorhandene ersetzt).
  *
  *   node scripts/migrate-from-json.js [--json data/db.json] [--mapping data/migration/produkte.json]
- *                                     [--out data/schompf.db] [--force]
+ *                                     [--out data/schompf.db] [--force] [--keep-auth alte.db]
  *
  * Grundstruktur (Läden, Warengruppen, Lagerorte, Slots) kommt aus seed/struktur.json,
  * die Produkt-Zuordnung aus der Mapping-Datei (nicht im Git, enthält Haushaltsdaten).
@@ -24,6 +24,7 @@ const { values: args } = parseArgs({
     mapping: { type: 'string', default: join(API_DIR, 'data/migration/produkte.json') },
     out: { type: 'string', default: join(API_DIR, 'data/schompf.db') },
     force: { type: 'boolean', default: false },
+    'keep-auth': { type: 'string' },
   },
 });
 
@@ -58,6 +59,7 @@ db.transaction(() => {
   migrateMeals(dishes);
   migrateFreeItems(products, ids);
 })();
+if (args['keep-auth']) keepAuth(args['keep-auth']);
 
 db.close();
 printReport();
@@ -338,6 +340,15 @@ function migrateFreeItems(products, ids) {
     count++;
   }
   report.counts.freeItems = count;
+}
+
+// Personen und Geräte aus einer früheren SQLite-Datei übernehmen (Dev-Auffrischung ohne neu anmelden)
+function keepAuth(path) {
+  if (!existsSync(path)) return warn(`--keep-auth: ${path} nicht gefunden`);
+  db.prepare('ATTACH DATABASE ? AS prev').run(path);
+  db.transaction(() => db.exec('INSERT INTO persons SELECT * FROM prev.persons; INSERT INTO devices SELECT * FROM prev.devices;'))();
+  report.counts.keptDevices = db.prepare('SELECT COUNT(*) n FROM devices').get().n;
+  db.exec('DETACH DATABASE prev');
 }
 
 function printReport() {
