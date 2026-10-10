@@ -252,7 +252,9 @@ export function buildTripList(db, trip) {
     }
     const store = stores.get(storeId);
     const section = sections.get(sectionId);
-    const needed = sumAmounts(line.sources.map(s => ({ amount: s.amount, unit: s.unit })));
+    const summed = sumAmounts(line.sources.map(s => ({ amount: s.amount, unit: s.unit })));
+    // „nach Bedarf“ nur zeigen, wenn es gar keine bezifferte Menge gibt
+    const needed = summed.some(n => n.amount != null) ? summed.filter(n => n.amount != null) : summed.slice(0, 1);
     const override = ti?.amount != null ? { amount: ti.amount, unit: ti.unit } : null;
     return {
       key: line.key,

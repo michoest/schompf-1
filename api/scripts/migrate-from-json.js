@@ -50,7 +50,7 @@ const DISH_KIND = { 'ner': 'takeaway', 'coli': 'buy' };
 const DISH_DRAFT = new Set(['kelhuhn']);
 const DISH_DELETE = new Set(['picknick']);
 const EXTRA_COMPONENTS = [{ dish: 'Leischküchle', component: 'Toffellat', factor: 1, optional: true }];
-const SHELF_LIFE_MAX = 6; // nur bewusst kurz gesetzte Haltbarkeiten übernehmen
+const SHELF_LIFE_MAX = 2; // nur bewusst sehr kurze Haltbarkeiten übernehmen (Hackleisch, Rot, …)
 
 db.transaction(() => {
   const ids = seedStructure();

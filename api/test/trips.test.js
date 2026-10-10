@@ -86,6 +86,13 @@ test('Mengen pro Portion × Portionen, Einheiten werden zusammengefasst', () => 
   assert.equal(line(list, 'Ghetti').sources.length, 2);
 });
 
+test('„nach Bedarf“ verschwindet neben bezifferten Mengen', () => {
+  const zucker = saveDish(db, { name: 'Zuckerzeug', ingredients: [{ productName: 'Salz', amount: 70, unit: 'g' }] }).dish;
+  meal('2026-10-14', ids.nese);
+  meal('2026-10-15', zucker);
+  assert.equal(line(buildTripList(db, trip()), 'Salz').display, '70 g');
+});
+
 test('Feste Bestandteile einmal, optionale Beilagen nur wenn gewählt, Holen ohne Bedarf', () => {
   meal('2026-10-14', ids.rillen, { servings: 2 });
   // wie in den übernommenen Daten: fester Bestandteil zusätzlich als gewählte Beilage gespeichert
