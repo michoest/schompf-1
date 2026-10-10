@@ -77,6 +77,42 @@ test('Mahlzeiten: Gericht, Reste, Freitext', async () => {
   assert.equal(moved.body.dishId, dish.id, 'Gericht bleibt beim Verschieben');
 });
 
+test('Einkauf anlegen, abhaken; andere Geräte bekommen die Änderung live', async () => {
+  const events = [];
+  const controller = new AbortController();
+  const stream = await fetch(`${base}/api/events?token=${token}`, { signal: controller.signal });
+  assert.equal(stream.headers.get('content-type'), 'text/event-stream');
+  const reader = stream.body.getReader();
+  const reading = (async () => {
+    const decoder = new TextDecoder();
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        for (const block of decoder.decode(value).split('\n\n')) {
+          const data = /^event: change\ndata: (.*)$/m.exec(block);
+          if (data) events.push(JSON.parse(data[1]));
+        }
+      }
+    } catch { /* abgebrochen */ }
+  })();
+
+  const created = await call('POST', '/api/trips', { date: '2026-10-13', coversFrom: '2026-10-13', coversTo: '2026-10-16' });
+  assert.equal(created.status, 201);
+  const ghetti = created.body.items.find(i => i.name === 'Ghetti');
+  assert.ok(ghetti, 'Bedarf aus den Mahlzeiten');
+  const marked = await call('PUT', `/api/trips/${created.body.trip.id}/items/${ghetti.productId}/now`, { state: 'in_cart' });
+  assert.equal(marked.body.state, 'in_cart');
+  const current = (await call('GET', '/api/trips/current')).body;
+  assert.equal(current.items.find(i => i.name === 'Ghetti').state, 'in_cart');
+  assert.equal(current.items.find(i => i.name === 'Ghetti').updatedBy, 'Andrea');
+
+  await new Promise(r => setTimeout(r, 50));
+  controller.abort();
+  await reading;
+  assert.deepEqual(events.map(e => [e.scope, e.by]), [['trips', 'Andrea'], ['trips', 'Andrea']]);
+});
+
 test('Produkt in Benutzung kann nicht gelöscht werden', async () => {
   const ghetti = (await call('GET', '/api/products')).body.find(p => p.name === 'Ghetti');
   assert.equal(ghetti.usedIn, 1);

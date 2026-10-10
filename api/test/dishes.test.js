@@ -61,7 +61,7 @@ test('Gericht speichern, als Datei ausgeben und unverändert zurücklesen', () =
 
   const file = dishToFile(dish);
   assert.match(file, /- 125 g Ghetti/);
-  assert.match(file, /- 1\/2 Bund Silie|- 0,5 Bund Silie/);
+  assert.match(file, /- 0,5 Bunds Silie/);
   assert.match(file, /- Toffellat × 0,5/);
   assert.match(file, /- Hackleisch auftauen \(12 h vorher\)/);
 

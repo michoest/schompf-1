@@ -103,6 +103,8 @@ function seedStructure() {
     groups.set(group.name, id);
   });
 
+  db.prepare("INSERT INTO settings (key, value) VALUES ('shoppingWeekdays', ?)").run(JSON.stringify(structure.shoppingWeekdays));
+
   structure.mealSlots.forEach((slot, i) => {
     db.prepare('INSERT INTO meal_slots (id, name, sort, time) VALUES (?, ?, ?, ?)').run(slot.id, slot.name, i, slot.time);
   });

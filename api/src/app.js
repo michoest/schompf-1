@@ -5,10 +5,17 @@ import { listProducts, getProduct, saveProduct, deleteProduct } from './repo/pro
 import { listMeals, getMeal, saveMeal, deleteMeal } from './repo/meals.js';
 import { getStructure } from './repo/structure.js';
 import { authenticate, pairDevice } from './repo/auth.js';
+import {
+  suggestTrip, getTrip, getCurrentTrip, listTrips, createTrip, updateTrip, buildTripList,
+  setTripItem, addFreeItem, updateFreeItem, deleteFreeItem,
+} from './repo/trips.js';
+import { createEventHub } from './events.js';
 
 /** Express-App auf einer geöffneten Datenbank (Tests übergeben eine In-Memory-DB). */
 export function createApp(db, { corsOrigins = ['http://localhost:5173'] } = {}) {
   const app = express();
+  const events = createEventHub();
+  app.locals.events = events;
   app.use(cors({ origin: corsOrigins }));
   app.use(express.json({ limit: '1mb' }));
 
@@ -22,12 +29,27 @@ export function createApp(db, { corsOrigins = ['http://localhost:5173'] } = {}) 
 
   app.use('/api', (req, res, next) => {
     const header = req.get('authorization') ?? '';
-    const auth = authenticate(db, header.startsWith('Bearer ') ? header.slice(7) : null);
+    // EventSource kann keine Header setzen → für /api/events Token als Query-Parameter
+    const token = header.startsWith('Bearer ') ? header.slice(7) : (req.path === '/events' ? req.query.token : null);
+    const auth = authenticate(db, token);
     if (!auth) return res.status(401).json({ error: 'Nicht angemeldet' });
     req.person = auth.person;
     req.device = auth.device;
     next();
   });
+
+  // Jede erfolgreiche Änderung an alle Geräte melden
+  app.use('/api', (req, res, next) => {
+    if (req.method !== 'GET') {
+      const scope = req.path.split('/')[1];
+      res.on('finish', () => {
+        if (res.statusCode < 400) events.publish({ scope, by: req.person.name, deviceId: req.device.id });
+      });
+    }
+    next();
+  });
+
+  app.get('/api/events', (req, res) => events.subscribe(req, res, req));
 
   app.get('/api/auth/me', (req, res) => res.json({ person: req.person, device: req.device }));
   app.get('/api/structure', (req, res) => res.json(getStructure(db)));
@@ -59,6 +81,32 @@ export function createApp(db, { corsOrigins = ['http://localhost:5173'] } = {}) 
   app.post('/api/meals', (req, res) => res.status(201).json(saveMeal(db, req.body, { personId: req.person.id })));
   app.put('/api/meals/:id', (req, res) => sendOr404(res, saveMeal(db, req.body, { id: req.params.id, personId: req.person.id })));
   app.delete('/api/meals/:id', (req, res) => res.status(deleteMeal(db, req.params.id) ? 204 : 404).end());
+
+  // Einkäufe
+  app.get('/api/trips/suggestion', (req, res) => res.json(suggestTrip(db)));
+  app.get('/api/trips', (req, res) => res.json(listTrips(db)));
+  app.get('/api/trips/current', (req, res) => {
+    const trip = getCurrentTrip(db);
+    res.json(trip ? buildTripList(db, trip) : null);
+  });
+  app.get('/api/trips/:id', (req, res) => {
+    const trip = getTrip(db, req.params.id);
+    sendOr404(res, trip && buildTripList(db, trip));
+  });
+  app.post('/api/trips', (req, res) => res.status(201).json(buildTripList(db, createTrip(db, req.body, req.person.id))));
+  app.put('/api/trips/:id', (req, res) => {
+    const trip = updateTrip(db, req.params.id, req.body);
+    sendOr404(res, trip && buildTripList(db, trip));
+  });
+  app.put('/api/trips/:id/items/:productId/:part', (req, res) =>
+    sendOr404(res, setTripItem(db, req.params.id, req.params.productId, req.params.part, req.body, req.person.id)));
+  app.post('/api/trips/:id/free-items', (req, res) =>
+    res.status(201).json(addFreeItem(db, { ...req.body, tripId: req.params.id, storeId: null }, req.person.id)));
+
+  // Freie Artikel / Merkliste („bei Gelegenheit“, an einen Laden gebunden)
+  app.post('/api/free-items', (req, res) => res.status(201).json(addFreeItem(db, { ...req.body, tripId: null }, req.person.id)));
+  app.put('/api/free-items/:id', (req, res) => sendOr404(res, updateFreeItem(db, req.params.id, req.body)));
+  app.delete('/api/free-items/:id', (req, res) => res.status(deleteFreeItem(db, req.params.id) ? 204 : 404).end());
 
   app.use((req, res) => res.status(404).json({ error: 'Nicht gefunden' }));
 

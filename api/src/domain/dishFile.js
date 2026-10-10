@@ -5,7 +5,7 @@
  *   name: Ghetti Nese
  *   art: kochen            # kochen | fertig | holen
  *   status: aktiv          # aktiv | entwurf
- *   portionen: 2
+ *   portionen: 2           # übliche Anzahl beim Planen; Mengen gelten pro Portion
  *   kategorien: [Dels]
  *   zutaten:
  *     - 125 g Ghetti
@@ -47,7 +47,7 @@ export function dishToFile(dish) {
   if (dish.preparations.length) head.vorbereitungen = dish.preparations.map(p => `${p.text} (${formatNumber(p.leadHours)} h vorher)`);
 
   const yaml = YAML.stringify(head, { lineWidth: 0 });
-  return `---\n${yaml}---\n${dish.recipe ? `${dish.recipe.trim()}\n` : ''}`;
+  return `---\n# Mengen pro Portion; „portionen“ ist die übliche Anzahl beim Planen\n${yaml}---\n${dish.recipe ? `${dish.recipe.trim()}\n` : ''}`;
 }
 
 export function fileToDish(text) {
