@@ -9,6 +9,7 @@
  *   uebersicht                     alle Gerichte als Tabelle (CSV)
  *   verlauf <Name>                 Änderungsprotokoll eines Gerichts
  *   person <Name>                  Person anlegen
+ *   umbenennen <Alt> <Neu>         Person umbenennen
  *   code <Person>                  Anmeldecode für ein neues Gerät (24 h gültig)
  *   geraete                        angemeldete Geräte
  *   abmelden <Geräte-ID>           Gerät abmelden
@@ -79,6 +80,13 @@ try {
     case 'person':
       console.log('Angelegt:', createPerson(db, args.join(' ')).name);
       break;
+    case 'umbenennen': {
+      const [from, to] = args;
+      if (!from || !to) fail('Aufruf: umbenennen <Alt> <Neu>');
+      const changed = db.prepare('UPDATE persons SET name = ? WHERE name = ?').run(to, from).changes;
+      console.log(changed ? `${from} heißt jetzt ${to}` : `Person „${from}“ nicht gefunden`);
+      break;
+    }
     case 'code': {
       const { code, person, expiresAt } = createPairingCode(db, args.join(' '));
       console.log(`Anmeldecode für ${person.name}: ${code} (gültig bis ${new Date(expiresAt).toLocaleString('de-DE')})`);
