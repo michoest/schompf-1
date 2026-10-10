@@ -178,15 +178,43 @@ function validate(db, input, before, ctx) {
     return { text: String(p.text ?? '').trim(), leadHours };
   });
 
+  const recipe = pick(input, before, 'recipe');
+  const ingredientNames = new Set(ingredients.map(i => db.prepare('SELECT name FROM products WHERE id = ?').get(i.productId).name.toLowerCase()));
+  for (const name of recipePlaceholders(recipe)) {
+    if (!ingredientNames.has(name.toLowerCase())) errors.push(`Rezept: {${name}} ist keine Zutat dieses Gerichts`);
+  }
+
   if (errors.length) throw new ValidationError(errors);
   return {
     name, kind, status, servings,
     sourceUrl: pick(input, before, 'sourceUrl'),
     takeawayWhere: pick(input, before, 'takeawayWhere'),
-    recipe: pick(input, before, 'recipe'),
+    recipe,
     categories: [...new Set((input.categories ?? before?.categories ?? []).map(c => String(c).trim()).filter(Boolean))],
     ingredients, components, preparations,
   };
+}
+
+/** Platzhalter {Zutat} bzw. {Zutat, Anteil} im Rezepttext → Liste der Zutatennamen */
+export const PLACEHOLDER = /\{([^,}]+)(?:\s*,\s*([0-9.,/]+))?\}/g;
+export function recipePlaceholders(recipe) {
+  return [...String(recipe ?? '').matchAll(PLACEHOLDER)].map(m => m[1].trim());
+}
+
+/** Produkt umbenannt → Platzhalter in allen Rezepten mitziehen */
+export function renameInRecipes(db, oldName, newName) {
+  const escaped = oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`\\{\\s*${escaped}\\s*(,[^}]*)?\\}`, 'gi');
+  let changed = 0;
+  for (const dish of db.prepare("SELECT id, recipe FROM dishes WHERE recipe LIKE '%{%'").all()) {
+    const updated = dish.recipe.replace(pattern, (m, factor) => `{${newName}${factor ?? ''}}`);
+    if (updated !== dish.recipe) {
+      db.prepare('UPDATE dishes SET recipe = ?, updated_at = ? WHERE id = ?').run(updated, now(), dish.id);
+      db.prepare("INSERT INTO dish_changes (dish_id, at, source, summary) VALUES (?, ?, 'app', ?)").run(dish.id, now(), `Rezept: {${oldName}} → {${newName}}`);
+      changed++;
+    }
+  }
+  return changed;
 }
 
 function pick(input, before, field) {

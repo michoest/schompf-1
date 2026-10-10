@@ -32,7 +32,13 @@ const blocks = computed(() => {
 })
 
 const scale = block => (servings.value || 1) * block.factor
-const recipeHtml = block => renderRecipe(block.dish.recipe, block.dish.ingredients, scale(block), data.units)
+// Weggelassene optionale Zutaten erscheinen im Text nur mit Namen, ohne Menge
+const recipeHtml = block => renderRecipe(
+  block.dish.recipe,
+  block.dish.ingredients.map(i => (excluded.value.has(i.id) ? { ...i, amount: null } : i)),
+  scale(block),
+  data.units,
+)
 </script>
 
 <template>
