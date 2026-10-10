@@ -9,10 +9,13 @@ export function renderRecipe(recipe, ingredients, servings, units) {
   if (!recipe) return ''
   const byName = new Map(ingredients.map(i => [i.productName.toLowerCase(), i]))
   const text = recipe.replace(/\{([^,}]+)(?:\s*,\s*([0-9.,/]+))?\}/g, (match, name, factorText) => {
+    // Anteil: „0.5“, „0,5“ oder „1/2“
     const ingredient = byName.get(name.trim().toLowerCase())
     if (!ingredient) return name.trim()
     if (ingredient.amount == null) return ingredient.productName
-    const factor = factorText ? Number(factorText.replace(',', '.')) : 1
+    const factor = !factorText ? 1 : factorText.includes('/')
+      ? factorText.split('/').map(Number).reduce((a, b) => a / b)
+      : Number(factorText.replace(',', '.'))
     if (!Number.isFinite(factor)) return match
     return `**${formatAmount(ingredient.amount * servings * factor, ingredient.unit, units)} ${ingredient.productName}**`
   })

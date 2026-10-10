@@ -15,6 +15,8 @@ REFRESH_DB="${1:-}"
 # Produkt-Zuordnung für die Übernahme liegt nicht im Git (Haushaltsdaten) → mitkopieren
 scp -q api/data/migration/produkte.json pi5:dev/schompf-dev/api/data/migration/produkte.json 2>/dev/null \
   || { ssh pi5 'mkdir -p ~/dev/schompf-dev/api/data/migration' && scp -q api/data/migration/produkte.json pi5:dev/schompf-dev/api/data/migration/produkte.json; }
+# Überarbeitete Gerichte (Rezepte), die bei jeder Übernahme zuletzt eingespielt werden
+rsync -a --delete api/data/migration/gerichte/ pi5:dev/schompf-dev/api/data/migration/gerichte/ 2>/dev/null || true
 ssh pi5 "REFRESH_DB=$REFRESH_DB bash -s" <<'REMOTE'
 set -euo pipefail
 cd ~/dev/schompf-dev

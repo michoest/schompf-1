@@ -1,6 +1,6 @@
 import { newId, now } from '../db/index.js';
 import { normalizeUnit } from '../domain/units.js';
-import { ValidationError } from './dishes.js';
+import { ValidationError, renameInRecipes } from './dishes.js';
 
 const SELECT = `SELECT p.id, p.name, p.unit, p.group_id AS groupId, g.name AS groupName, p.section_id AS sectionId,
                        p.is_staple AS isStaple, p.shelf_life_days AS shelfLifeDays,
@@ -43,8 +43,11 @@ export function saveProduct(db, input, id = null) {
     at: now(),
   };
   if (before) {
-    db.prepare(`UPDATE products SET name=@name, unit=@unit, group_id=@groupId, section_id=@sectionId, is_staple=@isStaple,
-                shelf_life_days=@shelfLifeDays, updated_at=@at WHERE id=@id`).run(row);
+    db.transaction(() => {
+      db.prepare(`UPDATE products SET name=@name, unit=@unit, group_id=@groupId, section_id=@sectionId, is_staple=@isStaple,
+                  shelf_life_days=@shelfLifeDays, updated_at=@at WHERE id=@id`).run(row);
+      if (before.name !== name) renameInRecipes(db, before.name, name);
+    })();
   } else {
     db.prepare(`INSERT INTO products (id, name, unit, group_id, section_id, is_staple, shelf_life_days, created_at, updated_at)
                 VALUES (@id, @name, @unit, @groupId, @sectionId, @isStaple, @shelfLifeDays, @at, @at)`).run(row);

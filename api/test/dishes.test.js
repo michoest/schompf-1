@@ -94,6 +94,15 @@ test('Ungültige Gerichte werden mit verständlichen Meldungen abgelehnt', () =>
   assert.equal(getDish(db, 'Kaputt'), null, 'nichts halb gespeichert');
 });
 
+test('Rezept-Platzhalter müssen auf Zutaten zeigen; Umbenennen zieht sie mit', async () => {
+  assert.throws(() => saveDish(db, { name: 'X', recipe: '{Ghetti} kochen, {Gibtsnicht} dazu', ingredients: [{ productName: 'Ghetti', amount: 100, unit: 'g' }] }),
+    err => err.messages?.includes('Rezept: {Gibtsnicht} ist keine Zutat dieses Gerichts'));
+  const { dish } = saveDish(db, { name: 'X', recipe: '{ghetti, 1/2} kochen, dann {Ghetti, 0,5}', ingredients: [{ productName: 'Ghetti', amount: 100, unit: 'g' }] });
+  const { saveProduct } = await import('../src/repo/products.js');
+  saveProduct(db, { name: 'Ghettis' }, dish.ingredients[0].productId);
+  assert.equal(getDish(db, dish.id).recipe, '{Ghettis, 1/2} kochen, dann {Ghettis, 0,5}');
+});
+
 test('Holen-Gerichte haben keine Zutaten', () => {
   assert.throws(() => saveDish(db, { name: 'Ner', kind: 'takeaway', ingredients: [{ productName: 'Salz' }] }), ValidationError);
   const { dish } = saveDish(db, { name: 'Ner', kind: 'takeaway', takeawayWhere: 'Ecke' });

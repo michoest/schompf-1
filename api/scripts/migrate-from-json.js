@@ -8,6 +8,8 @@
  *
  * Grundstruktur (Läden, Warengruppen, Lagerorte, Slots) kommt aus seed/struktur.json,
  * die Produkt-Zuordnung aus der Mapping-Datei (nicht im Git, enthält Haushaltsdaten).
+ * Überarbeitete Gerichte (Rezepte etc.) aus data/migration/gerichte/*.md werden zuletzt eingespielt,
+ * damit inhaltliche Arbeit vor dem Umstieg nicht verloren geht.
  */
 import { readFileSync, existsSync, rmSync } from 'fs';
 import { dirname, join } from 'path';
@@ -15,6 +17,9 @@ import { fileURLToPath } from 'url';
 import { parseArgs } from 'util';
 import { openDatabase, newId } from '../src/db/index.js';
 import { normalizeUnit } from '../src/domain/units.js';
+import { saveDish } from '../src/repo/dishes.js';
+import { fileToDish } from '../src/domain/dishFile.js';
+import { readdirSync } from 'fs';
 
 const API_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -59,6 +64,7 @@ db.transaction(() => {
   migrateMeals(dishes);
   migrateFreeItems(products, ids);
 })();
+applyDishFiles(join(dirname(args.mapping), 'gerichte'));
 if (args['keep-auth']) keepAuth(args['keep-auth']);
 
 db.close();
@@ -342,6 +348,20 @@ function migrateFreeItems(products, ids) {
     count++;
   }
   report.counts.freeItems = count;
+}
+
+function applyDishFiles(dir) {
+  if (!existsSync(dir)) return;
+  let count = 0;
+  for (const file of readdirSync(dir).filter(f => f.endsWith('.md')).sort()) {
+    try {
+      const { summary } = saveDish(db, fileToDish(readFileSync(join(dir, file), 'utf8')), { source: 'migration' });
+      if (summary) count++;
+    } catch (e) {
+      warn(`Gericht-Datei ${file}: ${e.messages?.join('; ') ?? e.message}`);
+    }
+  }
+  report.counts.dishFilesApplied = count;
 }
 
 // Personen und Geräte aus einer früheren SQLite-Datei übernehmen (Dev-Auffrischung ohne neu anmelden)
