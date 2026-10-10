@@ -191,17 +191,19 @@ CREATE TABLE shopping_trips (
   created_at  TEXT NOT NULL
 );
 
--- Eingriffe pro Einkauf und Produkt; der Bedarf selbst wird berechnet
+-- Eingriffe pro Einkauf und Produkt; der Bedarf selbst wird berechnet.
+-- part: 'now' = jetzt kaufen, 'later' = Anteil, der wegen Haltbarkeit später gekauft wird
 CREATE TABLE trip_items (
   trip_id      TEXT NOT NULL REFERENCES shopping_trips(id) ON DELETE CASCADE,
   product_id   TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  part         TEXT NOT NULL DEFAULT 'now' CHECK (part IN ('now', 'later')),
   state        TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open', 'have', 'in_cart', 'skip')),
   amount       REAL,           -- Mengen-Override
   unit         TEXT,
   use_fallback INTEGER NOT NULL DEFAULT 0,  -- „gibt's hier nicht“
   updated_by   TEXT REFERENCES persons(id) ON DELETE SET NULL,
   updated_at   TEXT NOT NULL,
-  PRIMARY KEY (trip_id, product_id)
+  PRIMARY KEY (trip_id, product_id, part)
 );
 
 -- Freie Artikel: zu einem Einkauf oder auf der Merkliste eines Ladens

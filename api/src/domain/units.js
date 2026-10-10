@@ -1,6 +1,6 @@
 /**
- * Feste Einheitenliste. Gespeichert wird immer der `code`; Einzahl/Mehrzahl und
- * Schatzisch-Schreibweisen sind Aliase. Gewicht und Volumen werden umgerechnet,
+ * Feste Einheitenliste. Gespeichert wird immer der `code` (Hochdeutsch); angezeigt wird Schatzisch
+ * (singular/plural), Hochdeutsch und andere Schreibweisen sind Aliase. Gewicht und Volumen werden umgerechnet,
  * alle anderen Einheiten werden nur mit sich selbst addiert.
  */
 export const UNITS = [
@@ -12,22 +12,22 @@ export const UNITS = [
   { code: 'EL', singular: 'EL', plural: 'EL', aliases: ['esslöffel'] },
   { code: 'TL', singular: 'TL', plural: 'TL', aliases: ['teelöffel'] },
   { code: 'Zehe', singular: 'Zehe', plural: 'Zehen', aliases: [] },
-  { code: 'Packung', singular: 'Packung', plural: 'Packungen', aliases: ['packungs', 'pck', 'pkg'] },
-  { code: 'Bund', singular: 'Bund', plural: 'Bund', aliases: ['bunds'] },
-  { code: 'Scheibe', singular: 'Scheibe', plural: 'Scheiben', aliases: ['scheibs'] },
-  { code: 'Zweig', singular: 'Zweig', plural: 'Zweige', aliases: ['weig', 'weigs'] },
-  { code: 'Stiel', singular: 'Stiel', plural: 'Stiele', aliases: ['tiel', 'tiele'] },
-  { code: 'Stängel', singular: 'Stängel', plural: 'Stängel', aliases: ['tängel'] },
-  { code: 'Prise', singular: 'Prise', plural: 'Prisen', aliases: ['rise'] },
-  { code: 'Glas', singular: 'Glas', plural: 'Gläser', aliases: ['las'] },
-  { code: 'Tube', singular: 'Tube', plural: 'Tuben', aliases: ['tubs'] },
-  { code: 'Dose', singular: 'Dose', plural: 'Dosen', aliases: ['dosen'] },
+  { code: 'Packung', singular: 'Packung', plural: 'Packungs', aliases: ['packungen', 'pck', 'pkg'] },
+  { code: 'Bund', singular: 'Bund', plural: 'Bunds', aliases: [] },
+  { code: 'Scheibe', singular: 'Scheibe', plural: 'Scheibs', aliases: ['scheiben'] },
+  { code: 'Zweig', singular: 'Weig', plural: 'Weigs', aliases: ['zweige'] },
+  { code: 'Stiel', singular: 'Tiel', plural: 'Tiele', aliases: ['stiele'] },
+  { code: 'Stängel', singular: 'Tängel', plural: 'Tängel', aliases: [] },
+  { code: 'Prise', singular: 'Rise', plural: 'Rises', aliases: ['prisen'] },
+  { code: 'Glas', singular: 'Las', plural: 'Las', aliases: ['gläser'] },
+  { code: 'Tube', singular: 'Tub', plural: 'Tubs', aliases: ['tuben'] },
+  { code: 'Dose', singular: 'Dose', plural: 'Doses', aliases: ['dosen'] },
   { code: 'Becher', singular: 'Becher', plural: 'Becher', aliases: [] },
   { code: 'Paar', singular: 'Paar', plural: 'Paar', aliases: [] },
   { code: 'cm', singular: 'cm', plural: 'cm', aliases: [] },
   { code: 'Kästchen', singular: 'Kästchen', plural: 'Kästchen', aliases: [] },
-  { code: 'Rolle', singular: 'Rolle', plural: 'Rollen', aliases: [] },
-  { code: 'Kugel', singular: 'Kugel', plural: 'Kugeln', aliases: [] },
+  { code: 'Rolle', singular: 'Rolle', plural: 'Rolles', aliases: ['rollen'] },
+  { code: 'Kugel', singular: 'Kugel', plural: 'Kugels', aliases: ['kugeln'] },
   { code: 'Schuss', singular: 'Schuss', plural: 'Schuss', aliases: [] },
 ];
 

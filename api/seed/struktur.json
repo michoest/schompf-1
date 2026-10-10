@@ -36,6 +36,8 @@
     { "name": "Getränke", "storage": "Speisekammer", "preferred": "We", "fallback": null, "sections": { "We": "Getränke" } },
     { "name": "Drogerie & Haushalt", "storage": null, "preferred": "dm", "fallback": "We", "sections": { "dm": "Alles", "We": "Haushalt" } }
   ],
+  "_einkaufstage": "Wochentage (0 = So … 6 = Sa); ein Einkauf deckt vom Einkaufstag bis zum Tag vor dem nächsten",
+  "shoppingWeekdays": [3, 6],
   "mealSlots": [
     { "id": "breakfast", "name": "Frühstück", "time": "08:00" },
     { "id": "lunch", "name": "Mittagessen", "time": "12:00" },
