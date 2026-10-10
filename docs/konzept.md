@@ -25,16 +25,17 @@ Ein Haushalt (zwei Personen) plant alle Mahlzeiten; der Einkauf ergibt sich dara
 
 **Gerichte**
 - **Gericht**: Name, Art (*Kochen* / *Fertig kaufen* / *Holen*), Status (aktiv / Entwurf), Grundportionen, Kategorien (Dels, Lat, Toffels, …), Quell-Link.
-  - **Zutaten**: Produkt, Menge, Einheit, optional ja/nein.
+  - **Zutaten** (Mengen pro Portion): Produkt, Menge, Einheit; optional mit Standard „meist dabei“ oder „manchmal“ – beim Planen ist der Standard vorausgewählt, die Mahlzeit speichert nur Abweichungen.
   - **Bestandteile/Beilagen**: andere Gerichte mit Mengenfaktor, fest (immer dabei, z.B. Runch → Meladenrot mit Ei) oder optional (Auswahl, z.B. Rillen → Toffellat, …).
-  - **Rezept**: Schritte; **Vorbereitungen** mit Vorlauf (z.B. „12 h vorher einweichen“).
+  - **Rezept**: Schritte mit Mengen-Platzhaltern `{Zutat}` bzw. `{Zutat, 1/2}` (Menge für die geplanten Portionen; beim Speichern geprüft, Umbenennen zieht mit); **Vorbereitungen** mit Vorlauf (z.B. „12 h vorher einweichen“).
   - **Änderungsprotokoll**: Mengen-Feedback beim Kochen ändert das Gericht sofort, mit Datum.
   - *Holen*-Gerichte haben keine Zutaten (optional „wo“), erzeugen keinen Einkauf.
 
 **Planung**
 - **Mahlzeit**: Datum + Slot, Inhalt = *Gericht* (Portionen, gewählte Beilagen, weggelassene optionale Zutaten) | *Reste* | *Freitext* (Einmaliges, Unentschiedenes, Besuch). Nur Gerichte mit Zutaten erzeugen Bedarf.
   Status geplant → zubereitet; wer hat eingetragen.
-- **Slots**: Frühstück 8, Mittag 12, Abend 17 Uhr.
+- **Slots**: Frühstück 8, Mittag 12, Abend 17 Uhr (Uhrzeiten nur für Erinnerungen, nicht in der Oberfläche).
+- **Kochen**: Die Kochansicht zeigt die geplanten (= eingekauften) Portionen; Umstellen ist möglich, wird aber deutlich als Abweichung markiert.
 
 **Einkauf**
 - **Einkauf**: Datum, abgedeckter Zeitraum (bis zum nächsten Einkaufstag), Phase (planen → Vorrat prüfen → einkaufen → erledigt), erstellt von. Vergangene Einkäufe bleiben erhalten.
