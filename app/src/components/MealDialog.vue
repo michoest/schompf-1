@@ -38,7 +38,7 @@ const QUICK_MINUTES = 30
 const kinds = [
   { value: 'dish', title: 'Gericht', icon: 'mdi-pot-steam-outline' },
   { value: 'leftovers', title: 'Reste', icon: 'mdi-recycle' },
-  { value: 'text', title: 'Sonstiges', icon: 'mdi-dots-horizontal-circle-outline' },
+  { value: 'text', title: 'Sonstiges', icon: 'mdi-room-service-outline' },
 ]
 const label = ref(null)
 // Eigener Name: bei neuen eigenen Mahlzeiten und beim Bearbeiten von Mahlzeiten an optionalen Positionen

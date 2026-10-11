@@ -13,7 +13,7 @@ const live = useLiveStore()
 const list = ref(null)          // { trip, items, freeItems, reminders }
 const loading = ref(true)
 const tab = ref('pantry')
-const showDone = ref(false)
+const openDone = ref(new Set())   // Abschnitte, deren gekaufte Artikel aufgeklappt sind
 const tripDialog = ref(false)
 const editTrip = ref(null)
 
@@ -73,7 +73,11 @@ const shopStores = computed(() => {
   return [...stores.values()].sort((a, b) => a.sort - b.sort).map(store => {
     const sections = [...store.sections.values()].sort((a, b) => a.sort - b.sort)
       .map(s => ({ ...s, items: s.items.sort((a, b) => (a.state === 'in_cart') - (b.state === 'in_cart') || byName(a, b)) }))
-      .map(s => ({ ...s, visible: showDone.value ? s.items : s.items.filter(i => i.state !== 'in_cart' || recent.value.has(i.key)) }))
+      .map(s => {
+        const key = `${store.id ?? 'none'}/${s.name}`
+        const done = s.items.filter(i => i.state === 'in_cart' && !recent.value.has(i.key))
+        return { ...s, key, done, visible: s.items.filter(i => i.state !== 'in_cart' || recent.value.has(i.key)), doneOpen: openDone.value.has(key) }
+      })
     const open = sections.reduce((n, s) => n + s.items.filter(i => i.state !== 'in_cart').length, 0)
       + store.reminders.filter(r => r.state === 'open').length
     return { ...store, sections, open }
@@ -126,6 +130,12 @@ async function setFree(item, state) {
     item.state = before
     appStore.showError(e)
   }
+}
+
+function toggleDone(key) {
+  const next = new Set(openDone.value)
+  if (next.has(key)) next.delete(key); else next.add(key)
+  openDone.value = next
 }
 
 function tapPantry(item) {
@@ -229,7 +239,6 @@ const sourceLabel = s => s.type === 'manual'
         <template #activator="{ props }"><v-btn icon="mdi-pencil-outline" variant="text" v-bind="props" aria-label="Einkauf bearbeiten" /></template>
         <v-list density="compact">
           <v-list-item prepend-icon="mdi-calendar-edit" title="Zeitraum ändern" @click="editTrip = trip; tripDialog = true" />
-          <v-list-item :prepend-icon="showDone ? 'mdi-eye-off-outline' : 'mdi-eye-outline'" :title="showDone ? 'Erledigte ausblenden' : 'Erledigte zeigen'" @click="showDone = !showDone" />
           <v-list-item prepend-icon="mdi-cart-plus" title="Neuer Einkauf" @click="editTrip = null; tripDialog = true" />
           <v-list-item prepend-icon="mdi-check-all" title="Einkauf abschließen" @click="finishTrip" />
         </v-list>
@@ -294,7 +303,7 @@ const sourceLabel = s => s.type === 'manual'
           <v-icon v-else icon="mdi-check-circle" color="primary" size="small" class="ml-2" />
         </v-card-title>
         <template v-for="section in store.sections" :key="section.name">
-          <div v-if="section.visible.length" class="section-name text-caption text-medium-emphasis px-4 pt-2">{{ section.name }}</div>
+          <div v-if="section.visible.length || section.done.length" class="section-name text-caption text-medium-emphasis px-4 pt-2">{{ section.name }}</div>
           <v-list density="compact" class="py-0">
             <v-list-item v-for="item in section.visible" :key="item.key" :class="{ done: item.state === 'in_cart' }" @click="tapShop(item)">
               <template #prepend>
@@ -308,6 +317,18 @@ const sourceLabel = s => s.type === 'manual'
               </template>
             </v-list-item>
           </v-list>
+          <template v-if="section.done.length">
+            <v-list v-if="section.doneOpen" density="compact" class="py-0">
+              <v-list-item v-for="item in section.done" :key="item.key" class="done" @click="tapShop(item)">
+                <template #prepend><v-icon icon="mdi-checkbox-marked-circle" color="primary" /></template>
+                <v-list-item-title>{{ item.name }}</v-list-item-title>
+                <template #append><span class="text-body-2 text-medium-emphasis">{{ item.display }}</span></template>
+              </v-list-item>
+            </v-list>
+            <v-btn variant="text" size="small" class="ml-2 text-medium-emphasis" :prepend-icon="section.doneOpen ? 'mdi-chevron-up' : 'mdi-cart-check'" @click="toggleDone(section.key)">
+              {{ section.done.length }} im Wagen
+            </v-btn>
+          </template>
         </template>
         <template v-if="store.reminders.length">
           <div class="section-name text-caption text-medium-emphasis px-4 pt-2">Bei Gelegenheit</div>
