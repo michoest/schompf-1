@@ -400,11 +400,18 @@ function applyDishFiles(dir) {
 function keepAuth(path) {
   if (!existsSync(path)) return warn(`--keep-auth: ${path} nicht gefunden`);
   db.prepare('ATTACH DATABASE ? AS prev').run(path);
+  // nur gemeinsame Spalten kopieren (das Schema kann seit der alten Datei gewachsen sein)
+  const columns = (schema, table) => db.prepare(`PRAGMA ${schema}.table_info(${table})`).all().map(c => c.name);
+  const copy = table => {
+    const shared = columns('prev', table).filter(c => columns('main', table).includes(c));
+    if (shared.length) db.exec(`INSERT INTO main.${table} (${shared.join(',')}) SELECT ${shared.join(',')} FROM prev.${table}`);
+  };
   db.transaction(() => {
-    db.exec('INSERT INTO persons SELECT * FROM prev.persons; INSERT INTO devices SELECT * FROM prev.devices;');
     const has = table => db.prepare("SELECT 1 FROM prev.sqlite_master WHERE type = 'table' AND name = ?").get(table);
-    if (has('push_subscriptions')) db.exec('INSERT INTO push_subscriptions SELECT * FROM prev.push_subscriptions');
-    if (has('notifications_sent')) db.exec('INSERT INTO notifications_sent SELECT * FROM prev.notifications_sent');
+    copy('persons');
+    copy('devices');
+    if (has('push_subscriptions')) copy('push_subscriptions');
+    if (has('notifications_sent')) copy('notifications_sent');
     // Anmerkungen: Gericht über den Namen neu zuordnen (neu angelegte Gerichte bekommen neue IDs)
     if (has('feedback')) db.exec(`INSERT INTO feedback (id, dish_id, dish_name, person_id, text, status, resolution, created_at, resolved_at)
       SELECT f.id, (SELECT d.id FROM dishes d WHERE d.name = f.dish_name), f.dish_name, f.person_id, f.text, f.status, f.resolution, f.created_at, f.resolved_at
