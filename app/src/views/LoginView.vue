@@ -27,7 +27,7 @@ async function submit() {
   try {
     await session.pair(code.value.trim(), deviceName.value.trim())
     appStore.showSnackbar(`Hallo ${session.person.name}!`)
-    router.replace(route.query.next || '/heute')
+    router.replace(route.query.next || '/kochen')
   } catch (e) {
     appStore.showError(e)
   } finally {

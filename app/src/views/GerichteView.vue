@@ -35,6 +35,7 @@ const kindIcon = { cook: 'mdi-pot-steam-outline', buy: 'mdi-package-variant-clos
         <v-list-item v-for="d in dishes" :key="d.id" :title="d.name" :subtitle="d.categories.join(', ')" :prepend-icon="kindIcon[d.kind]"
           :class="{ 'opacity-60': d.status === 'draft' }" @click="router.push(`/gericht/${d.id}`)">
           <template #append>
+            <span v-if="d.totalMinutes" class="text-caption text-medium-emphasis mr-2">{{ d.totalMinutes }} Min.</span>
             <v-chip v-if="d.status === 'draft'" size="x-small" class="mr-1">Entwurf</v-chip>
             <v-icon v-if="d.kind === 'cook' && !d.recipe" icon="mdi-text-box-remove-outline" size="small" color="warning" />
           </template>

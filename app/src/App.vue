@@ -18,9 +18,9 @@ const isMobile = computed(() => windowWidth.value < 960)
 const menu = ref(false)
 
 const mainNav = [
-  { title: 'Heute', icon: 'mdi-silverware-fork-knife', to: '/heute' },
   { title: 'Plan', icon: 'mdi-calendar-week', to: '/plan' },
-  { title: 'Einkauf', icon: 'mdi-cart-outline', to: '/einkauf' },
+  { title: 'Einkaufen', icon: 'mdi-cart-outline', to: '/einkauf' },
+  { title: 'Kochen', icon: 'mdi-pot-steam-outline', to: '/kochen' },
 ]
 const adminNav = [
   { title: 'Gerichte', icon: 'mdi-book-open-variant', to: '/verwaltung/gerichte' },
@@ -80,7 +80,7 @@ onUnmounted(() => {
       </template>
       <v-app-bar-title>
         {{ title }}
-        <v-chip v-if="isDevInstance" size="x-small" variant="flat" color="white" class="ml-2 font-weight-bold">DEV</v-chip>
+        <v-chip v-if="isDevInstance" size="x-small" variant="flat" color="orange-darken-2" class="ml-2 font-weight-bold">DEV</v-chip>
       </v-app-bar-title>
       <template #append>
         <v-menu v-model="menu">

@@ -27,7 +27,7 @@ const productItems = computed(() => data.products.map(p => p.name))
 onMounted(async () => {
   await data.load()
   if (isNew.value) {
-    form.value = { name: '', kind: 'cook', status: 'draft', servings: 2, categories: [], sourceUrl: '', takeawayWhere: '', recipe: '', ingredients: [], components: [], preparations: [] }
+    form.value = { name: '', kind: 'cook', status: 'draft', servings: 2, totalMinutes: '', categories: [], sourceUrl: '', takeawayWhere: '', recipe: '', ingredients: [], components: [], preparations: [] }
     return
   }
   const dish = await api.dish(route.params.id)
@@ -60,6 +60,7 @@ async function save() {
   const f = form.value
   const body = {
     name: f.name, kind: f.kind, status: f.status, servings: parseNumber(f.servings),
+    totalMinutes: f.totalMinutes === '' || f.totalMinutes == null ? null : Number(f.totalMinutes),
     categories: f.categories, sourceUrl: f.sourceUrl || null, takeawayWhere: f.takeawayWhere || null, recipe: f.recipe || null,
     ingredients: f.kind === 'takeaway' ? [] : f.ingredients.filter(i => i.productName)
       .map(i => ({ productName: i.productName, amount: parseNumber(i.amount), unit: i.unit, optional: i.need !== 'always', defaultOn: i.need !== 'sometimes' })),
@@ -98,6 +99,7 @@ async function remove() {
           <v-select v-model="form.kind" :items="kinds" label="Art" style="min-width: 180px" />
           <v-select v-model="form.status" :items="[{ value: 'active', title: 'Aktiv' }, { value: 'draft', title: 'Entwurf' }]" label="Status" style="min-width: 140px" />
           <v-text-field v-if="form.kind !== 'takeaway'" v-model="form.servings" label="Übliche Portionen" inputmode="decimal" style="max-width: 160px" />
+          <v-text-field v-if="form.kind !== 'takeaway'" v-model="form.totalMinutes" label="Zeit gesamt" suffix="Min." inputmode="numeric" style="max-width: 140px" />
         </div>
         <v-combobox v-model="form.categories" :items="data.categories" label="Kategorien" multiple chips closable-chips />
         <v-text-field v-if="form.kind === 'takeaway'" v-model="form.takeawayWhere" label="Wo holen/bestellen?" />
