@@ -1,19 +1,21 @@
 # Schompf
 
-Private Mahlzeitenplanungs- und Einkaufslisten-App. Monorepo: `app/` (Vue 3 + Vuetify + Pinia, Vite-PWA) und `api/` (Express + lowdb, Daten in einer JSON-Datei).
+Private Mahlzeitenplanungs- und Einkaufs-App (zwei Personen: Roßes und Leines). Monorepo: `app/` (Vue 3 + Vuetify + Pinia, Vite-PWA mit eigenem Service Worker `app/src/sw.js`) und `api/` (Express + SQLite via better-sqlite3).
 
 ## Infrastruktur
 
-- Frontend: GitHub Pages, Branch `gh-pages`, Domain `schompf.michoest.com` (`app/public/CNAME`).
-- Backend: Raspberry Pi 5 (`ssh pi5`, Hostname `pi5.local`), Checkout in `~/dev/schompf-1`, PM2-Prozess `schompf-1-api` auf Port 3000.
-  Öffentlich über Cloudflare-Tunnel → Caddy → `127.0.0.1:3000` als `schompf-api.michoest.com`.
-- Live-Daten: nur `~/dev/schompf-1/api/data/db.json` auf dem Pi (nicht im Git, Repo ist öffentlich).
-  Backups: `~/backups/schompf/` auf dem Pi, täglich per Cron + vor jedem API-Deploy, 30 Tage Aufbewahrung.
-- Die API hat keine Authentifizierung.
-- Dev-Instanz: Branch `dev`, Checkout `~/dev/schompf-dev`, PM2 `schompf-dev-api` auf Port 3010 (eigene DB-Kopie),
-  Frontend-Build in `/srv/schompf-dev`; Caddy liefert beides unter `schompf-dev.michoest.com` aus.
+- **Produktion** (seit 2026-10-11, Branch `main`):
+  - Frontend: GitHub Pages, Branch `gh-pages`, `schompf.michoest.com` (`app/public/CNAME`, `404.html` = `index.html` für App-Routen).
+  - API: Pi 5 (`ssh pi5`, `pi5.local`), Checkout `~/dev/schompf-1`, PM2 `schompf-1-api`, Port 3000, über Cloudflare-Tunnel → Caddy als `schompf-api.michoest.com`.
+  - Daten: `~/dev/schompf-1/api/data/schompf.db` (SQLite). Alte `db.json` bleibt als Archiv; Sicherung vor dem Umstieg: `~/backups/schompf/db-vor-umstieg.json`, Git-Tag `vor-umstieg`.
+  - Backups: `~/backups/schompf/` täglich 3:15 per Cron + vor jedem API-Deploy (SQLite-Backup-API), 30 Tage.
+  - Benachrichtigungen: Web-Push (VAPID-Schlüssel in `api/.env`, nicht im Git), Erinnerungen per Scheduler im API-Prozess (TZ Europe/Berlin).
+- **Dev-Instanz** (Branch `dev`): Checkout `~/dev/schompf-dev`, PM2 `schompf-dev-api` Port 3010, Frontend in `/srv/schompf-dev`, Caddy liefert beides unter `schompf-dev.michoest.com` (no-cache für App-Hülle, `sw.js` no-store wegen Cloudflare). `SCHEDULER=off` (keine Erinnerungen).
+- Alle API-Endpunkte brauchen ein Geräte-Token (Anmeldung per Einmal-Code, `scripts/pi.sh prod code <Person>`).
+- iPhone-Benachrichtigungen nur, wenn die App in **Safari** zum Home-Bildschirm hinzugefügt wurde (nicht Arc/Chrome).
 
-Fachliches Zielbild und Etappenplan: `docs/konzept.md`. Produkt- und Gerichtnamen sind auf „Schatzisch“ (Regeln dort bzw. im Review).
+Fachliches Zielbild: `docs/konzept.md`. Produkt- und Gerichtnamen sind auf „Schatzisch“ (Wortanfang weg, Mehrzahl -s, Adjektive -es).
+Anmerkungen der Nutzer: `scripts/pi.sh prod feedback` lesen, umsetzen, `scripts/pi.sh prod erledigt <ID> <Notiz>`.
 
 ## Entwicklung
 
@@ -28,7 +30,8 @@ Schema in `api/src/db/migrations/NNN_*.sql`, Stand in `PRAGMA user_version`. **�
 
 ## Deploy
 
-Gearbeitet wird auf `dev`; `main` = Produktion. `npm run deploy:dev` (optional `-- --refresh-db`) deployt `dev` auf die Dev-Instanz.
+Gearbeitet wird auf `dev`; `main` = Produktion. `npm run deploy:dev` deployt `dev` auf die Dev-Instanz (`-- --refresh-db` nur bewusst: verwirft Dev-Einkäufe/-Planung, behält Logins/Abos/Anmerkungen).
+Release: `dev` per fast-forward nach `main`, dann Backend und Frontend direkt nacheinander (Frontend und API müssen zusammenpassen).
 
 1. Backend (bei API-Änderungen zuerst): pushen, dann `npm run deploy:api`.
    API-Änderungen abwärtskompatibel halten – die PWA kann noch eine Weile die alte Frontend-Version aus dem Cache ausliefern.
