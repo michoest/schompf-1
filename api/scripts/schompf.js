@@ -10,7 +10,7 @@
  *   verlauf <Name>                 Änderungsprotokoll eines Gerichts
  *   person <Name>                  Person anlegen
  *   umbenennen <Alt> <Neu>         Person umbenennen
- *   code <Person>                  Anmeldecode für ein neues Gerät (24 h gültig)
+ *   code <Person> [Tage]           Anmeldecode für ein neues Gerät (Standard 1 Tag gültig)
  *   feedback [alle]                offene (bzw. alle) Anmerkungen
  *   erledigt <ID> [Notiz]          Anmerkung als erledigt markieren (ID-Anfang genügt)
  *   vapid                          neue Schlüssel für Benachrichtigungen (Zeilen für .env)
@@ -93,7 +93,8 @@ try {
       break;
     }
     case 'code': {
-      const { code, person, expiresAt } = createPairingCode(db, args.join(' '));
+      const days = /^\d+$/.test(args.at(-1) ?? '') && args.length > 1 ? Number(args.pop()) : 1;
+      const { code, person, expiresAt } = createPairingCode(db, args.join(' '), { hours: days * 24 });
       console.log(`Anmeldecode für ${person.name}: ${code} (gültig bis ${new Date(expiresAt).toLocaleString('de-DE')})`);
       break;
     }

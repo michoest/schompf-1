@@ -20,13 +20,13 @@ export function listPersons(db) {
   return db.prepare('SELECT id, name FROM persons ORDER BY name').all();
 }
 
-/** Einmal-Code, mit dem sich ein Gerät dieser Person anmeldet (24 h gültig). */
-export function createPairingCode(db, personName) {
+/** Einmal-Code, mit dem sich ein Gerät dieser Person anmeldet (standardmäßig 24 h gültig). */
+export function createPairingCode(db, personName, { hours = CODE_TTL_HOURS } = {}) {
   const person = db.prepare('SELECT id, name FROM persons WHERE name = ? OR id = ?').get(personName, personName);
   if (!person) throw new ValidationError([`Person „${personName}“ unbekannt`]);
   db.prepare('DELETE FROM pairing_codes WHERE expires_at < ?').run(now());
   const code = Array.from({ length: 6 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join('');
-  const expiresAt = new Date(Date.now() + CODE_TTL_HOURS * 3600_000).toISOString();
+  const expiresAt = new Date(Date.now() + hours * 3600_000).toISOString();
   db.prepare('INSERT INTO pairing_codes (code, person_id, expires_at) VALUES (?, ?, ?)').run(code, person.id, expiresAt);
   return { code, person, expiresAt };
 }
