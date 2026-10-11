@@ -331,6 +331,19 @@ function migrateMeals(dishes) {
     }
   }
   report.counts.meals = kinds;
+
+  // In der alten App schon auf der Liste („committed“) → auf einen abgeschlossenen Einkauf setzen,
+  // damit diese Mahlzeiten nach dem Umstieg nicht noch einmal eingekauft werden
+  const committed = old.meals.filter(m => m.status === 'committed' && dishes.byId.has(m.dishId));
+  if (committed.length) {
+    const dates = committed.map(m => m.date).sort();
+    const tripId = newId();
+    db.prepare(`INSERT INTO shopping_trips (id, date, covers_from, covers_to, phase, created_at, snapshot) VALUES (?, ?, ?, ?, 'done', ?, 1)`)
+      .run(tripId, dates[0], dates[0], dates.at(-1), new Date().toISOString());
+    const link = db.prepare('UPDATE meals SET trip_id = ? WHERE id = ?');
+    for (const m of committed) link.run(tripId, m.id);
+    report.counts.committedMeals = committed.length;
+  }
 }
 
 function migrateFreeItems(products, ids) {

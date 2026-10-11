@@ -73,7 +73,8 @@ export default {
   meals: (from, to) => get(`/api/meals?from=${from}&to=${to}`),
   createMeal: data => post('/api/meals', data),
   updateMeal: (id, data) => put(`/api/meals/${id}`, data),
-  deleteMeal: id => del(`/api/meals/${id}`),
+  deleteMeal: (id, syncTrip = false) => del(`/api/meals/${id}${syncTrip ? '?syncTrip=1' : ''}`),
+  previewMeal: body => post('/api/meals/preview', body),
 
   tripSuggestion: () => get('/api/trips/suggestion'),
   currentTrip: () => get('/api/trips/current'),

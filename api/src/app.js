@@ -7,7 +7,7 @@ import { getStructure } from './repo/structure.js';
 import { authenticate, pairDevice } from './repo/auth.js';
 import {
   suggestTrip, getTrip, getCurrentTrip, listTrips, createTrip, updateTrip, buildTripList,
-  setTripItem, addFreeItem, updateFreeItem, deleteFreeItem,
+  setTripItem, addFreeItem, updateFreeItem, deleteFreeItem, syncMealToTrip, previewMealSync,
 } from './repo/trips.js';
 import { createEventHub } from './events.js';
 import { addFeedback, listFeedback, resolveFeedback } from './repo/feedback.js';
@@ -81,13 +81,28 @@ export function createApp(db, { corsOrigins = ['http://localhost:5173'] } = {}) 
   // Mahlzeiten
   app.get('/api/meals', (req, res) => res.json(listMeals(db, { from: req.query.from, to: req.query.to })));
   app.get('/api/meals/:id', (req, res) => sendOr404(res, getMeal(db, req.params.id)));
+  // syncTrip: Einkaufsliste ausdrücklich mitändern (sonst bleibt sie, wie sie ist)
+  app.post('/api/meals/preview', (req, res) => {
+    const { id = null, remove = false, ...input } = req.body;
+    res.json(previewMealSync(db, input, { id, remove, saveMeal }));
+  });
   app.post('/api/meals', (req, res) => {
-    const meal = saveMeal(db, req.body, { personId: req.person.id });
+    const { syncTrip, ...input } = req.body;
+    let meal = saveMeal(db, input, { personId: req.person.id });
+    if (syncTrip) { syncMealToTrip(db, meal.id); meal = getMeal(db, meal.id); }
     planNotifier.mealPlanned(req.person, meal.date);
     res.status(201).json(meal);
   });
-  app.put('/api/meals/:id', (req, res) => sendOr404(res, saveMeal(db, req.body, { id: req.params.id, personId: req.person.id })));
-  app.delete('/api/meals/:id', (req, res) => res.status(deleteMeal(db, req.params.id) ? 204 : 404).end());
+  app.put('/api/meals/:id', (req, res) => {
+    const { syncTrip, ...input } = req.body;
+    const meal = saveMeal(db, input, { id: req.params.id, personId: req.person.id });
+    if (meal && syncTrip) syncMealToTrip(db, meal.id);
+    sendOr404(res, meal && getMeal(db, meal.id));
+  });
+  app.delete('/api/meals/:id', (req, res) => {
+    if (req.query.syncTrip === '1') syncMealToTrip(db, req.params.id, { remove: true });
+    res.status(deleteMeal(db, req.params.id) ? 204 : 404).end();
+  });
 
   // Einkäufe
   app.get('/api/trips/suggestion', (req, res) => res.json(suggestTrip(db)));

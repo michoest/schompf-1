@@ -4,7 +4,7 @@ import { ValidationError } from './dishes.js';
 const KINDS = ['dish', 'leftovers', 'text'];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-const SELECT = `SELECT m.id, m.date, m.slot_id AS slotId, m.label, m.sort, m.kind, m.dish_id AS dishId, d.name AS dishName,
+const SELECT = `SELECT m.id, m.date, m.slot_id AS slotId, m.label, m.sort, m.kind, m.trip_id AS tripId, m.dish_id AS dishId, d.name AS dishName,
                        d.kind AS dishKind, m.servings, m.text, m.status, p.name AS createdBy,
                        m.created_at AS createdAt, m.updated_at AS updatedAt
                 FROM meals m

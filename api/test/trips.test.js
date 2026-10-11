@@ -4,7 +4,7 @@ import { openDatabase, newId, now } from '../src/db/index.js';
 import { suggestTripRange } from '../src/domain/dates.js';
 import { saveDish } from '../src/repo/dishes.js';
 import { saveMeal, deleteMeal } from '../src/repo/meals.js';
-import { createTrip, buildTripList, setTripItem, addFreeItem, collectNeeds, suggestTrip } from '../src/repo/trips.js';
+import { createTrip, buildTripList, setTripItem, addFreeItem, collectNeeds, suggestTrip, syncMealToTrip, previewMealSync, updateTrip } from '../src/repo/trips.js';
 
 let db, ids;
 
@@ -67,6 +67,7 @@ beforeEach(() => {
 const meal = (date, dish, extra = {}) => saveMeal(db, { date, slotId: 'dinner', kind: 'dish', dishId: dish.id, ...extra });
 const trip = (from = '2026-10-14', to = '2026-10-16', date = from) => createTrip(db, { date, coversFrom: from, coversTo: to });
 const line = (list, name, part = 'now') => list.items.find(i => i.name === name && i.part === part);
+const getTripFresh = id => db.prepare('SELECT * FROM shopping_trips WHERE id = ?').all(id).map(r => ({ id: r.id, date: r.date, coversFrom: r.covers_from, coversTo: r.covers_to, phase: r.phase, createdAt: r.created_at }))[0];
 
 test('Zeitraum-Vorschlag mit Einkaufstagen Mi + Sa', () => {
   assert.deepEqual(suggestTripRange('2026-10-13', [3, 6]), { date: '2026-10-14', coversFrom: '2026-10-14', coversTo: '2026-10-16' }, 'Di → Mi–Fr');
@@ -99,7 +100,7 @@ test('Feste Bestandteile einmal, optionale Beilagen nur wenn gewählt, Holen ohn
   // wie in den übernommenen Daten: fester Bestandteil zusätzlich als gewählte Beilage gespeichert
   meal('2026-10-15', ids.rillen, { servings: 2, components: [{ dishId: ids.brot.id, factor: 0.5 }, { dishId: ids.lat.id, factor: 0.5 }] });
   meal('2026-10-16', ids.ner);
-  const sources = collectNeeds(db, '2026-10-14', '2026-10-16');
+  const sources = collectNeeds(db, { from: '2026-10-14', to: '2026-10-16' });
   const blauch = sources.filter(s => s.productId === ids.blauch);
   assert.deepEqual(blauch.map(s => s.amount), [1, 1], 'Ei-Rot × 0,5 × 2 Portionen, je Mahlzeit einmal');
   const maten = sources.filter(s => s.productId === ids.maten);
@@ -116,7 +117,8 @@ test('Optionale Zutaten: Standard an/aus, Auswahl pro Mahlzeit', () => {
 
   const changed = saveMeal(db, { ingredientChoices: [{ ingredientId: blauch.id, included: false }, { ingredientId: trone.id, included: true }] }, { id: standard.id });
   assert.deepEqual(changed.ingredientChoices.map(c => c.included).sort(), [false, true]);
-  list = buildTripList(db, trip());
+  syncMealToTrip(db, standard.id);
+  list = buildTripList(db, getTripFresh(db.prepare('SELECT trip_id FROM meals WHERE id = ?').pluck().get(standard.id)));
   assert.equal(line(list, 'Blauch'), undefined);
   assert.equal(line(list, 'Trone').display, '2');
 
@@ -125,14 +127,64 @@ test('Optionale Zutaten: Standard an/aus, Auswahl pro Mahlzeit', () => {
   assert.deepEqual(plain.ingredientChoices, []);
 });
 
-test('Planänderungen wirken sofort (alte Liste: Mengen gelöschter Mahlzeiten blieben stehen)', () => {
+test('Liste ist eingefroren: Planänderungen nur mit ausdrücklichem Anpassen', () => {
   const m = meal('2026-10-14', ids.nese);
   const t = trip();
   assert.equal(line(buildTripList(db, t), 'Ghetti').display, '250 g');
+  assert.equal(db.prepare('SELECT trip_id FROM meals WHERE id = ?').pluck().get(m.id), t.id, 'Mahlzeit steht auf dem Einkauf');
+
   saveMeal(db, { servings: 4 }, { id: m.id });
-  assert.equal(line(buildTripList(db, t), 'Ghetti').display, '500 g');
+  assert.equal(line(buildTripList(db, t), 'Ghetti').display, '250 g', 'ohne Anpassen bleibt die Liste');
+
+  const preview = previewMealSync(db, { servings: 6 }, { id: m.id, saveMeal });
+  assert.equal(preview.committed, true);
+  assert.deepEqual(preview.delta.filter(d => d.name === 'Ghetti').map(d => d.display), ['+500 g']);
+  assert.equal(db.prepare('SELECT servings FROM meals WHERE id = ?').pluck().get(m.id), 4, 'Vorschau speichert nichts');
+
+  syncMealToTrip(db, m.id);
+  const ghetti = line(buildTripList(db, t), 'Ghetti');
+  assert.equal(ghetti.display, '500 g');
+
   deleteMeal(db, m.id);
-  assert.equal(line(buildTripList(db, t), 'Ghetti'), undefined);
+  assert.equal(line(buildTripList(db, t), 'Ghetti').display, '500 g', 'gelöscht ohne Anpassen: Zutaten bleiben auf der Liste');
+});
+
+test('Neue Mahlzeit im Zeitraum: nur mit Anpassen auf die Liste, dann als neu markiert', () => {
+  meal('2026-10-14', ids.nese);
+  const t = trip();
+  const late = meal('2026-10-15', ids.lat);
+  assert.equal(line(buildTripList(db, t), 'Maten'), undefined);
+  assert.equal(previewMealSync(db, { date: '2026-10-15', slotId: 'lunch', kind: 'dish', dishId: ids.lat.id }, { saveMeal }).trip.id, t.id);
+  db.prepare("UPDATE shopping_trips SET created_at = '2026-01-01T00:00:00.000Z' WHERE id = ?").run(t.id);
+  syncMealToTrip(db, late.id);
+  const maten = line(buildTripList(db, getTripFresh(t.id)), 'Maten');
+  assert.equal(maten.display, '300 g');
+  assert.equal(maten.isNew, true);
+});
+
+test('Gelöschte Mahlzeit mit Anpassen: Zutaten verschwinden; neuer Einkauf nimmt nur Mahlzeiten ohne Liste', () => {
+  const m = meal('2026-10-14', ids.nese);
+  const first = trip('2026-10-14', '2026-10-16');
+  syncMealToTrip(db, m.id, { remove: true });
+  assert.equal(line(buildTripList(db, first), 'Ghetti'), undefined);
+
+  const bought = meal('2026-10-15', ids.lat);
+  syncMealToTrip(db, bought.id);
+  saveMeal(db, { date: '2026-10-18' }, { id: bought.id });   // verschoben in den nächsten Zeitraum
+  meal('2026-10-19', ids.nese);
+  const second = trip('2026-10-17', '2026-10-20');
+  const list = buildTripList(db, second);
+  assert.equal(line(list, 'Maten'), undefined, 'schon eingekauft, obwohl verschoben');
+  assert.equal(line(list, 'Ghetti').display, '250 g');
+  assert.equal(previewMealSync(db, { servings: 3 }, { id: bought.id, saveMeal }).done, true, 'alter Einkauf ist abgeschlossen');
+});
+
+test('Zeitraum erweitern übernimmt dort noch nicht verplante Mahlzeiten', () => {
+  meal('2026-10-14', ids.nese);
+  const t = trip('2026-10-14', '2026-10-14');
+  meal('2026-10-15', ids.lat);
+  updateTrip(db, t.id, { coversTo: '2026-10-15' });
+  assert.equal(line(buildTripList(db, getTripFresh(t.id)), 'Maten').display, '300 g');
 });
 
 test('„Brauche ich nicht“ gilt nur für diesen Einkauf (alte Liste: für immer unsichtbar)', () => {
