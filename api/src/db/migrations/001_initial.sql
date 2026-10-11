@@ -14,7 +14,24 @@ CREATE TABLE devices (
   name         TEXT NOT NULL,
   token_hash   TEXT NOT NULL UNIQUE,
   created_at   TEXT NOT NULL,
-  last_seen_at TEXT
+  last_seen_at TEXT,
+  -- Benachrichtigungen pro Gerät (JSON): { plan, prep, cook, buy }
+  notify       TEXT NOT NULL DEFAULT '{"plan":true,"prep":true,"cook":true,"buy":true}'
+);
+
+-- Web-Push-Abos (ein Gerät kann mehrere haben, z.B. nach Neuinstallation)
+CREATE TABLE push_subscriptions (
+  endpoint   TEXT PRIMARY KEY,
+  device_id  TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  p256dh     TEXT NOT NULL,
+  auth       TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+-- Bereits gesendete Erinnerungen (Schlüssel z.B. „cook:<mealId>“), damit nichts doppelt kommt
+CREATE TABLE notifications_sent (
+  key     TEXT PRIMARY KEY,
+  sent_at TEXT NOT NULL
 );
 
 -- Kurzlebige Codes, mit denen sich ein neues Gerät einer Person zuordnet
@@ -226,6 +243,19 @@ CREATE TABLE free_items (
   created_at TEXT NOT NULL,
   done_at    TEXT,
   CHECK (trip_id IS NOT NULL OR store_id IS NOT NULL)
+);
+
+-- Anmerkungen zu Gerichten (oder allgemein), die Claude ausliest und umsetzt
+CREATE TABLE feedback (
+  id          TEXT PRIMARY KEY,
+  dish_id     TEXT REFERENCES dishes(id) ON DELETE SET NULL,
+  dish_name   TEXT,            -- Name zum Zeitpunkt der Anmerkung (übersteht Neuanlage bei Übernahme)
+  person_id   TEXT REFERENCES persons(id) ON DELETE SET NULL,
+  text        TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'done')),
+  resolution  TEXT,
+  created_at  TEXT NOT NULL,
+  resolved_at TEXT
 );
 
 CREATE TABLE settings (

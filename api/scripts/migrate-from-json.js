@@ -400,7 +400,16 @@ function applyDishFiles(dir) {
 function keepAuth(path) {
   if (!existsSync(path)) return warn(`--keep-auth: ${path} nicht gefunden`);
   db.prepare('ATTACH DATABASE ? AS prev').run(path);
-  db.transaction(() => db.exec('INSERT INTO persons SELECT * FROM prev.persons; INSERT INTO devices SELECT * FROM prev.devices;'))();
+  db.transaction(() => {
+    db.exec('INSERT INTO persons SELECT * FROM prev.persons; INSERT INTO devices SELECT * FROM prev.devices;');
+    const has = table => db.prepare("SELECT 1 FROM prev.sqlite_master WHERE type = 'table' AND name = ?").get(table);
+    if (has('push_subscriptions')) db.exec('INSERT INTO push_subscriptions SELECT * FROM prev.push_subscriptions');
+    if (has('notifications_sent')) db.exec('INSERT INTO notifications_sent SELECT * FROM prev.notifications_sent');
+    // Anmerkungen: Gericht über den Namen neu zuordnen (neu angelegte Gerichte bekommen neue IDs)
+    if (has('feedback')) db.exec(`INSERT INTO feedback (id, dish_id, dish_name, person_id, text, status, resolution, created_at, resolved_at)
+      SELECT f.id, (SELECT d.id FROM dishes d WHERE d.name = f.dish_name), f.dish_name, f.person_id, f.text, f.status, f.resolution, f.created_at, f.resolved_at
+      FROM prev.feedback f`);
+  })();
   report.counts.keptDevices = db.prepare('SELECT COUNT(*) n FROM devices').get().n;
   db.exec('DETACH DATABASE prev');
 }
