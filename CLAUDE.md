@@ -21,6 +21,11 @@ Fachliches Zielbild und Etappenplan: `docs/konzept.md`. Produkt- und Gerichtname
 - `npm run dev` startet API (:3000) und App (:5173). Im Dev-Modus ist `VITE_API_URL` leer, die App ruft relativ `/api` auf und der Vite-Proxy leitet an `VITE_API_PROXY` weiter.
 - Produktions-Build nutzt `app/.env.production` (`VITE_API_URL=https://schompf-api.michoest.com`).
 
+## Datenbank-Schema
+
+Schema in `api/src/db/migrations/NNN_*.sql`, Stand in `PRAGMA user_version`. **Änderungen nur als neue Migration** (002, 003, …) – bestehende Dateien nicht mehr ändern, weil die Dev-DB (und später die Live-DB) echte Daten trägt (Anmerkungen, Push-Abos, Geräte).
+Übernahme aus der alten App: `npm run migrate` (bzw. `deploy:dev -- --refresh-db`), Inhalte aus `api/data/migration/` (nicht im Git): `produkte.json`, `rezepte/`, `gerichte/`, `zeiten.json`.
+
 ## Deploy
 
 Gearbeitet wird auf `dev`; `main` = Produktion. `npm run deploy:dev` (optional `-- --refresh-db`) deployt `dev` auf die Dev-Instanz.
