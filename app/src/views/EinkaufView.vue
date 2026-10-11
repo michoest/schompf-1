@@ -197,9 +197,12 @@ async function quickAdd() {
   } catch (e) { appStore.showError(e) }
 }
 const quickTargets = computed(() => [
-  { title: 'Dieser Einkauf', value: 'trip' },
-  ...data.stores.map(s => ({ title: `Bei Gelegenheit: ${s.name}`, value: s.id })),
+  { title: 'Dieser Einkauf', subtitle: 'kommt auf die aktuelle Liste', value: 'trip' },
+  ...data.stores.map(s => ({ title: `Merkliste ${s.name}`, subtitle: 'bleibt stehen, bis es erledigt ist', value: s.id })),
 ])
+const quickTargetLabel = computed(() => quickTarget.value === 'trip'
+  ? 'Dieser Einkauf'
+  : `Merkliste ${data.stores.find(s => s.id === quickTarget.value)?.name ?? ''}`)
 
 async function finishTrip() {
   try {
@@ -377,20 +380,25 @@ const sourceLabel = s => s.type === 'manual'
       </v-expansion-panel>
     </v-expansion-panels>
 
-    <!-- Schnelleingabe -->
+    <!-- Schnelleingabe: Ziel sichtbar als Chip, ein Knopf zum Hinzufügen -->
     <v-card class="quick-add" elevation="6">
-      <div class="d-flex align-center pa-2 ga-2">
-        <v-combobox v-model="quickText" :items="productNames" placeholder="Artikel, z.B. 2 Trone" persistent-placeholder menu-icon=""
-          density="compact" hide-details hide-no-data variant="solo-filled" flat class="flex-grow-1" @keydown.enter="quickAdd" />
+      <div class="px-3 pt-2">
         <v-menu>
           <template #activator="{ props }">
-            <v-btn v-bind="props" size="small" variant="tonal" :icon="quickTarget === 'trip' ? 'mdi-cart-outline' : 'mdi-bookmark-outline'" />
+            <v-chip v-bind="props" size="small" variant="tonal" :color="quickTarget === 'trip' ? 'primary' : 'orange-darken-2'"
+              :prepend-icon="quickTarget === 'trip' ? 'mdi-cart-outline' : 'mdi-bookmark-outline'" append-icon="mdi-menu-down">
+              {{ quickTargetLabel }}
+            </v-chip>
           </template>
           <v-list density="compact">
-            <v-list-item v-for="t in quickTargets" :key="t.value" :title="t.title" :active="quickTarget === t.value" @click="quickTarget = t.value" />
+            <v-list-item v-for="t in quickTargets" :key="t.value" :title="t.title" :subtitle="t.subtitle" :active="quickTarget === t.value" @click="quickTarget = t.value" />
           </v-list>
         </v-menu>
-        <v-btn icon="mdi-plus" color="primary" size="small" @click="quickAdd" />
+      </div>
+      <div class="d-flex align-center pa-2 pt-1 ga-2">
+        <v-combobox v-model="quickText" :items="productNames" placeholder="Artikel, z.B. 2 Trone" persistent-placeholder menu-icon=""
+          density="compact" hide-details hide-no-data class="flex-grow-1" @keydown.enter="quickAdd" />
+        <v-btn color="primary" icon="mdi-plus" size="small" aria-label="Hinzufügen" @click="quickAdd" />
       </div>
     </v-card>
 
@@ -436,7 +444,7 @@ const sourceLabel = s => s.type === 'manual'
 </template>
 
 <style scoped>
-.einkauf { padding-bottom: 72px; }
+.einkauf { padding-bottom: 110px; }
 .einkauf :deep(.v-list-item__prepend .v-icon) { margin-right: 0 !important; }
 .einkauf :deep(.v-list-item__prepend > .v-icon ~ .v-list-item__spacer) { width: 14px; }
 .done { opacity: 0.45; }
