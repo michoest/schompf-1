@@ -10,6 +10,7 @@ const props = defineProps({
   meal: { type: Object, default: null },   // bestehende Mahlzeit oder null
   date: { type: String, default: null },
   slotId: { type: String, default: null },
+  label: { type: String, default: null },  // eigener Name der Mahlzeit (z.B. „Kaffee & Kuchen“)
 })
 const emit = defineEmits(['update:modelValue', 'saved'])
 
@@ -34,13 +35,21 @@ const confirmDelete = ref(false)
 const showDetails = ref(null)
 
 const QUICK_MINUTES = 30
+const kinds = [
+  { value: 'dish', title: 'Gericht', icon: 'mdi-pot-steam-outline' },
+  { value: 'leftovers', title: 'Reste', icon: 'mdi-recycle' },
+  { value: 'text', title: 'Sonstiges', icon: 'mdi-dots-horizontal-circle-outline' },
+]
+const label = ref(null)
+// Eigener Name: bei neuen eigenen Mahlzeiten und beim Bearbeiten von Mahlzeiten an optionalen Positionen
+const labelEditable = computed(() => !!label.value || (isEdit.value && !!data.slots.find(s => s.id === slotId.value)?.optional))
 const open = computed({ get: () => props.modelValue, set: v => emit('update:modelValue', v) })
 const isEdit = computed(() => !!props.meal)
 const dish = computed(() => data.dishById.get(dishId.value) ?? null)
 const fixedComponents = computed(() => dish.value?.components.filter(c => !c.optional) ?? [])
 const optionalComponents = computed(() => dish.value?.components.filter(c => c.optional) ?? [])
 const optionalIngredients = computed(() => dish.value?.ingredients.filter(i => i.optional) ?? [])
-const slotName = computed(() => data.slots.find(s => s.id === (slotId.value ?? props.slotId))?.name)
+const slotName = computed(() => label.value || data.slots.find(s => s.id === (slotId.value ?? props.slotId))?.name)
 
 const filteredDishes = computed(() => {
   const q = search.value.trim().toLowerCase()
@@ -72,6 +81,7 @@ watch(open, isOpen => {
   date.value = m?.date ?? props.date
   slotId.value = m?.slotId ?? props.slotId
   status.value = m?.status ?? 'planned'
+  label.value = m?.label ?? props.label
   search.value = ''
   category.value = null
   confirmDelete.value = false
@@ -99,7 +109,7 @@ const canSave = computed(() => {
 })
 
 function payload() {
-  const base = { date: date.value, slotId: slotId.value, kind: kind.value, status: status.value }
+  const base = { date: date.value, slotId: slotId.value, label: label.value || null, kind: kind.value, status: status.value }
   if (kind.value === 'dish') {
     const factorOf = id => optionalComponents.value.find(c => c.dishId === id)?.factor ?? 1
     return {
@@ -151,11 +161,11 @@ async function remove() {
       </v-toolbar>
 
       <v-card-text class="pt-5">
-        <v-btn-toggle v-model="kind" mandatory color="primary" variant="outlined" divided class="kind-toggle mb-6">
-          <v-btn value="dish" prepend-icon="mdi-pot-steam-outline">Gericht</v-btn>
-          <v-btn value="leftovers" prepend-icon="mdi-recycle">Reste</v-btn>
-          <v-btn value="text" prepend-icon="mdi-dots-horizontal-circle-outline">Sonstiges</v-btn>
-        </v-btn-toggle>
+        <div class="kind-toggle mb-6">
+          <v-btn v-for="k in kinds" :key="k.value" :prepend-icon="k.icon" :color="kind === k.value ? 'primary' : undefined"
+            :variant="kind === k.value ? 'flat' : 'tonal'" class="kind-btn" @click="kind = k.value">{{ k.title }}</v-btn>
+        </div>
+        <v-text-field v-if="labelEditable" v-model="label" label="Name der Mahlzeit" placeholder="z.B. Kaffee & Kuchen" class="mb-2" />
 
         <!-- Gericht auswählen -->
         <template v-if="kind === 'dish' && !dish">
@@ -274,8 +284,8 @@ async function remove() {
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .dish-list { max-height: 48vh; overflow-y: auto; }
 .servings { min-width: 2.5em; text-align: center; }
-.kind-toggle { width: 100%; height: 48px; }
-.kind-toggle :deep(.v-btn) { flex: 1 1 0; letter-spacing: 0; text-transform: none; font-size: 0.95rem; }
+.kind-toggle { display: flex; gap: 10px; }
+.kind-btn { flex: 1 1 0; height: 46px !important; letter-spacing: 0; text-transform: none; font-size: 0.95rem; }
 .amount { min-width: 88px; text-align: right; margin-right: 12px; }
 .recipe :deep(ol), .recipe :deep(ul) { padding-left: 1.3em; }
 .recipe :deep(li) { margin-bottom: 0.5em; line-height: 1.45; }

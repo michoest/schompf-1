@@ -23,6 +23,7 @@ const dialog = ref(false)
 const editMeal = ref(null)
 const newDate = ref(null)
 const newSlot = ref(null)
+const newLabel = ref(null)
 const tripDialog = ref(false)
 
 const days = computed(() => {
@@ -40,9 +41,44 @@ const mealsBySlot = computed(() => {
   return map
 })
 const inTrip = date => trip.value && date >= trip.value.coversFrom && date <= trip.value.coversTo
-// Feste Mahlzeiten immer, optionale (Snacks) nur, wenn an dem Tag belegt
-const slotsFor = date => data.slots.filter(s => !s.optional || mealsBySlot.value.has(`${date}/${s.id}`))
-const extraSlotsFor = date => data.slots.filter(s => s.optional && !mealsBySlot.value.has(`${date}/${s.id}`))
+// Zeilen eines Tages: feste Mahlzeiten immer, optionale (Snacks/eigene) nur, wenn belegt.
+// Mahlzeiten mit eigenem Namen bekommen eine eigene Zeile an der Position ihres Slots.
+function rowsFor(date) {
+  const rows = []
+  for (const slot of data.slots) {
+    const meals = mealsBySlot.value.get(`${date}/${slot.id}`) ?? []
+    const labels = [...new Set(meals.map(m => m.label ?? null))]
+    if (!slot.optional && !labels.includes(null)) labels.unshift(null)
+    for (const label of labels) {
+      rows.push({ key: `${slot.id}/${label ?? ''}`, slotId: slot.id, label, name: label ?? slot.name, meals: meals.filter(m => (m.label ?? null) === label) })
+    }
+  }
+  return rows
+}
+const snackSlots = computed(() => data.slots.filter(s => s.optional && s.id.startsWith('snack')))
+const positions = computed(() => [
+  { value: 'early', title: 'Vor dem Frühstück' },
+  { value: 'snack-morning', title: 'Zwischen Frühstück und Mittagessen' },
+  { value: 'snack-afternoon', title: 'Zwischen Mittag- und Abendessen' },
+  { value: 'snack-evening', title: 'Nach dem Abendessen' },
+].filter(p => data.slots.some(s => s.id === p.value)))
+
+// Eigene Mahlzeit: Name + Position abfragen, dann wie gewohnt anlegen
+const customDialog = ref(false)
+const customDate = ref(null)
+const customName = ref('')
+const customPosition = ref('snack-afternoon')
+function addCustom(date) {
+  customDate.value = date
+  customName.value = ''
+  customPosition.value = 'snack-afternoon'
+  customDialog.value = true
+}
+function confirmCustom() {
+  if (!customName.value.trim()) return
+  customDialog.value = false
+  addMeal(customDate.value, customPosition.value, customName.value.trim())
+}
 
 async function load() {
   loading.value = true
@@ -57,10 +93,11 @@ async function load() {
   }
 }
 
-function addMeal(date, slotId) {
+function addMeal(date, slotId, label = null) {
   editMeal.value = null
   newDate.value = date
   newSlot.value = slotId
+  newLabel.value = label
   dialog.value = true
 }
 function openMeal(meal) {
@@ -75,9 +112,10 @@ function mealLabel(m) {
   if (m.kind === 'leftovers') return m.text ? `Reste: ${m.text}` : 'Reste'
   return m.text
 }
+// gleiche Symbole wie im Mahlzeit-Dialog
 function mealIcon(m) {
   if (m.kind === 'leftovers') return 'mdi-recycle'
-  if (m.kind === 'text') return 'mdi-text-short'
+  if (m.kind === 'text') return 'mdi-dots-horizontal-circle-outline'
   if (m.dishKind === 'takeaway') return 'mdi-moped-outline'
   return null
 }
@@ -92,7 +130,7 @@ onMounted(async () => {
 
 <template>
   <div>
-    <v-card class="mb-3" variant="tonal" color="primary">
+    <v-card class="mb-4 trip-banner">
       <v-card-text class="d-flex align-center py-2">
         <v-icon icon="mdi-cart-outline" class="mr-3" />
         <div class="flex-grow-1 text-body-2">
@@ -115,58 +153,70 @@ onMounted(async () => {
         <v-spacer />
         <v-icon v-if="inTrip(date)" icon="mdi-cart-outline" size="small" color="primary" title="Im aktuellen Einkauf" />
       </div>
-      <template v-for="slot in slotsFor(date)" :key="slot.id">
-        <v-divider class="mx-4 slot-divider" />
-        <div class="slot d-flex align-start px-4 py-2">
-          <div class="slot-name text-body-2 text-medium-emphasis">{{ slot.name }}</div>
-          <div class="flex-grow-1 meals">
-            <div v-for="m in mealsBySlot.get(`${date}/${slot.id}`) ?? []" :key="m.id" class="meal d-flex align-center"
-              :class="{ prepared: m.status === 'prepared' }" @click="openMeal(m)">
-              <v-icon v-if="m.status === 'prepared'" icon="mdi-check" size="small" color="primary" class="mr-2" />
-              <v-icon v-else-if="mealIcon(m)" :icon="mealIcon(m)" size="small" class="mr-2 text-medium-emphasis" />
-              <span class="meal-name">{{ mealLabel(m) }}</span>
-              <span v-if="m.kind === 'dish' && m.dishKind !== 'takeaway'" class="servings text-body-2 text-medium-emphasis">
-                <v-icon icon="mdi-silverware-fork-knife" size="x-small" class="mr-1" />{{ formatNumber(m.servings) }}
-              </span>
-            </div>
+      <div v-for="row in rowsFor(date)" :key="row.key" class="slot d-flex align-start px-4 py-1">
+        <div class="slot-name text-body-2 text-medium-emphasis">{{ row.name }}</div>
+        <div class="flex-grow-1 meals">
+          <div v-for="m in row.meals" :key="m.id" class="meal d-flex align-center" :class="{ prepared: m.status === 'prepared', other: m.kind !== 'dish' }" @click="openMeal(m)">
+            <v-icon v-if="m.status === 'prepared'" icon="mdi-check" size="small" color="primary" class="mr-2" />
+            <v-icon v-else-if="mealIcon(m)" :icon="mealIcon(m)" size="small" class="mr-2 text-medium-emphasis" />
+            <span class="meal-name">{{ mealLabel(m) }}</span>
+            <span v-if="m.kind === 'dish' && m.dishKind !== 'takeaway'" class="servings text-body-2 text-medium-emphasis">
+              <v-icon icon="mdi-silverware-fork-knife" size="x-small" class="mr-1" />{{ formatNumber(m.servings) }}
+            </span>
           </div>
-          <v-btn icon="mdi-plus" size="small" variant="text" class="add-btn" :aria-label="`${slot.name} hinzufügen`" @click="addMeal(date, slot.id)" />
         </div>
-      </template>
-      <div v-if="extraSlotsFor(date).length" class="px-2 pb-2">
+        <v-btn icon="mdi-plus" size="small" variant="text" class="add-btn" :aria-label="`${row.name} hinzufügen`" @click="addMeal(date, row.slotId, row.label)" />
+      </div>
+      <div class="px-2 pb-2">
         <v-menu>
           <template #activator="{ props }">
             <v-btn v-bind="props" variant="text" size="small" prepend-icon="mdi-plus" class="text-medium-emphasis text-none">Weitere Mahlzeit</v-btn>
           </template>
           <v-list density="compact">
-            <v-list-item v-for="slot in extraSlotsFor(date)" :key="slot.id" :title="slot.name" @click="addMeal(date, slot.id)" />
+            <v-list-item v-for="slot in snackSlots" :key="slot.id" :title="slot.name" @click="addMeal(date, slot.id)" />
+            <v-divider />
+            <v-list-item prepend-icon="mdi-pencil-outline" title="Eigene Mahlzeit…" @click="addCustom(date)" />
           </v-list>
         </v-menu>
       </div>
-      <div v-else class="pb-2" />
     </v-card>
 
     <div class="text-center mb-4">
       <v-btn variant="text" size="small" prepend-icon="mdi-chevron-down" @click="later">Weitere Tage</v-btn>
     </div>
 
-    <MealDialog v-model="dialog" :meal="editMeal" :date="newDate" :slot-id="newSlot" @saved="load" />
+    <MealDialog v-model="dialog" :meal="editMeal" :date="newDate" :slot-id="newSlot" :label="newLabel" @saved="load" />
+
+    <v-dialog v-model="customDialog" max-width="420">
+      <v-card title="Eigene Mahlzeit">
+        <v-card-text>
+          <v-text-field v-model="customName" label="Name" placeholder="z.B. Kaffee & Kuchen" autofocus @keydown.enter="confirmCustom" />
+          <v-select v-model="customPosition" :items="positions" label="Wann?" />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="customDialog = false">Abbrechen</v-btn>
+          <v-btn color="primary" variant="flat" :disabled="!customName.trim()" @click="confirmCustom">Weiter</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
     <TripDialog v-model="tripDialog" @saved="router.push('/einkauf')" />
   </div>
 </template>
 
 <style scoped>
 .day { scroll-margin-top: 72px; }
+.trip-banner { background: linear-gradient(120deg, rgba(37, 99, 235, 0.10), rgba(79, 70, 229, 0.10)); box-shadow: none !important; }
 .day.today { border-left: 4px solid rgb(var(--v-theme-primary)); }
 .day.past { opacity: 0.7; }
 .slot { min-height: 52px; }
-.slot-divider { opacity: 0.08; }
 .slot-name { width: 96px; flex-shrink: 0; padding-top: 8px; }
 .meals { min-width: 0; }
 .meal { padding: 6px 4px 6px 0; cursor: pointer; border-radius: 6px; }
 .meal:hover { background: rgba(var(--v-theme-primary), 0.05); }
 .meal-name { flex-grow: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
 .meal.prepared .meal-name { color: rgba(var(--v-theme-on-surface), 0.55); font-weight: 400; }
+.meal.other .meal-name { font-style: italic; font-weight: 400; }
 .servings { margin-left: 16px; white-space: nowrap; }
 .add-btn { margin-left: 8px; flex-shrink: 0; }
 </style>

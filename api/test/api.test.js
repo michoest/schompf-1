@@ -65,6 +65,9 @@ test('Mahlzeiten: Gericht, Reste, Freitext', async () => {
   assert.equal(meal.body.createdBy, 'Andrea');
 
   await call('POST', '/api/meals', { date: '2026-10-13', slotId: 'dinner', kind: 'leftovers' });
+  const named = await call('POST', '/api/meals', { date: '2026-10-15', slotId: 'dinner', label: 'Kaffee & Kuchen', kind: 'text', text: 'Kuch' });
+  assert.equal(named.body.label, 'Kaffee & Kuchen');
+  await call('DELETE', `/api/meals/${named.body.id}`);
   await call('POST', '/api/meals', { date: '2026-10-14', slotId: 'dinner', kind: 'text', text: 'Holschompf' });
   assert.equal((await call('POST', '/api/meals', { date: '2026-10-14', slotId: 'dinner', kind: 'text' })).status, 400);
 

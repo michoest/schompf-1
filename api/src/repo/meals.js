@@ -4,7 +4,7 @@ import { ValidationError } from './dishes.js';
 const KINDS = ['dish', 'leftovers', 'text'];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-const SELECT = `SELECT m.id, m.date, m.slot_id AS slotId, m.sort, m.kind, m.dish_id AS dishId, d.name AS dishName,
+const SELECT = `SELECT m.id, m.date, m.slot_id AS slotId, m.label, m.sort, m.kind, m.dish_id AS dishId, d.name AS dishName,
                        d.kind AS dishKind, m.servings, m.text, m.status, p.name AS createdBy,
                        m.created_at AS createdAt, m.updated_at AS updatedAt
                 FROM meals m
@@ -50,6 +50,7 @@ export function saveMeal(db, input, { id = null, personId = null } = {}) {
     if (!db.prepare('SELECT 1 FROM meal_slots WHERE id = ?').get(merged.slotId ?? '')) errors.push('Mahlzeit-Slot unbekannt');
     if (!KINDS.includes(merged.kind)) errors.push(`Art „${merged.kind}“ unbekannt`);
     const text = merged.text == null || String(merged.text).trim() === '' ? null : String(merged.text).trim();
+    const label = merged.label == null || String(merged.label).trim() === '' ? null : String(merged.label).trim();
     let dishId = null, servings = null;
     if (merged.kind === 'dish') {
       const dish = db.prepare('SELECT id, servings FROM dishes WHERE id = ?').get(merged.dishId ?? '');
@@ -80,18 +81,18 @@ export function saveMeal(db, input, { id = null, personId = null } = {}) {
     if (errors.length) throw new ValidationError(errors);
 
     const row = {
-      id: id ?? newId(), date: merged.date, slotId: merged.slotId, kind: merged.kind, dishId, servings,
+      id: id ?? newId(), date: merged.date, slotId: merged.slotId, label, kind: merged.kind, dishId, servings,
       text: merged.kind === 'dish' ? null : text, status, at: now(),
       sort: before && before.date === merged.date && before.slotId === merged.slotId
         ? before.sort
         : db.prepare('SELECT COALESCE(MAX(sort) + 1, 0) n FROM meals WHERE date = ? AND slot_id = ?').get(merged.date, merged.slotId).n,
     };
     if (before) {
-      db.prepare(`UPDATE meals SET date=@date, slot_id=@slotId, sort=@sort, kind=@kind, dish_id=@dishId, servings=@servings,
+      db.prepare(`UPDATE meals SET date=@date, slot_id=@slotId, label=@label, sort=@sort, kind=@kind, dish_id=@dishId, servings=@servings,
                   text=@text, status=@status, updated_at=@at WHERE id=@id`).run(row);
     } else {
-      db.prepare(`INSERT INTO meals (id, date, slot_id, sort, kind, dish_id, servings, text, status, created_by, created_at, updated_at)
-                  VALUES (@id, @date, @slotId, @sort, @kind, @dishId, @servings, @text, @status, @personId, @at, @at)`)
+      db.prepare(`INSERT INTO meals (id, date, slot_id, label, sort, kind, dish_id, servings, text, status, created_by, created_at, updated_at)
+                  VALUES (@id, @date, @slotId, @label, @sort, @kind, @dishId, @servings, @text, @status, @personId, @at, @at)`)
         .run({ ...row, personId });
     }
     db.prepare('DELETE FROM meal_components WHERE meal_id = ?').run(row.id);

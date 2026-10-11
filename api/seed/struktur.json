@@ -39,6 +39,7 @@
   "_einkaufstage": "Wochentage (0 = So … 6 = Sa); ein Einkauf deckt vom Einkaufstag bis zum Tag vor dem nächsten",
   "shoppingWeekdays": [3, 6],
   "mealSlots": [
+    { "id": "early", "name": "Früh", "optional": true },
     { "id": "breakfast", "name": "Frühstück", "time": "08:00" },
     { "id": "snack-morning", "name": "Snack vormittags", "optional": true },
     { "id": "lunch", "name": "Mittagessen", "time": "12:00" },

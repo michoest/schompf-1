@@ -74,3 +74,7 @@ body {
 .gap-2 { gap: 8px; }
 .gap-3 { gap: 12px; }
 .gap-4 { gap: 16px; }
+
+/* Moderner, ruhiger: Knöpfe und Tabs ohne Großbuchstaben und Sperrschrift */
+.v-btn { text-transform: none !important; letter-spacing: 0 !important; font-weight: 500; }
+.v-toolbar.bg-primary { background: linear-gradient(120deg, #2563EB 0%, #4F46E5 100%) !important; }

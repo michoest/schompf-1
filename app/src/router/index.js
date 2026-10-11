@@ -4,7 +4,7 @@ import { hasToken } from '@/services/api'
 const routes = [
   { path: '/', redirect: '/kochen' },
   { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { title: 'Anmelden', public: true } },
-  { path: '/plan', name: 'plan', component: () => import('@/views/PlanView.vue'), meta: { title: 'Plan' } },
+  { path: '/plan', name: 'plan', component: () => import('@/views/PlanView.vue'), meta: { title: 'Planen' } },
   { path: '/einkauf', name: 'einkauf', component: () => import('@/views/EinkaufView.vue'), meta: { title: 'Einkaufen' } },
   { path: '/kochen', name: 'kochen', component: () => import('@/views/KochenView.vue'), meta: { title: 'Kochen' } },
   { path: '/gericht/:id', name: 'gericht', component: () => import('@/views/GerichtView.vue'), meta: { title: 'Gericht', back: true } },
