@@ -10,7 +10,9 @@ const corsOrigins = process.env.CORS_ORIGINS?.split(',') || ['http://localhost:5
 const db = openDatabase(databasePath());
 const app = createApp(db, { corsOrigins });
 
-if (pushConfigured()) startScheduler(db);
+// SCHEDULER=off (z.B. Dev-Instanz): keine automatischen Erinnerungen, Test-Nachrichten gehen trotzdem
+if (process.env.SCHEDULER === 'off') console.log('Erinnerungen aus (SCHEDULER=off)');
+else if (pushConfigured()) startScheduler(db);
 else console.log('Benachrichtigungen aus (VAPID-Schlüssel fehlen)');
 
 const server = app.listen(PORT, HOST, () => {
