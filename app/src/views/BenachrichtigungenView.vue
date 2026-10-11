@@ -134,7 +134,7 @@ onMounted(() => { load(); collectDiagnostics() })
       </div>
       <ol class="text-body-2 mt-2 ml-4">
         <li>App vom Home-Bildschirm löschen.</li>
-        <li>Seite in <strong>Safari</strong> öffnen → Teilen → „Zum Home-Bildschirm“ → <strong>„Als Web-App öffnen“ an</strong>.</li>
+        <li>Seite in <strong>Safari</strong> öffnen (nicht Arc, Chrome o.ä. – nur Safari-Web-Apps bekommen Benachrichtigungen) → Teilen → „Zum Home-Bildschirm“ → <strong>„Als Web-App öffnen“ an</strong>.</li>
         <li>Schompf vom Home-Bildschirm öffnen, neu anmelden, hier „Einschalten“ tippen und erlauben.</li>
       </ol>
     </v-alert>
