@@ -153,20 +153,21 @@ onMounted(async () => {
         <v-spacer />
         <v-icon v-if="inTrip(date)" icon="mdi-cart-outline" size="small" color="primary" title="Im aktuellen Einkauf" />
       </div>
-      <div v-for="row in rowsFor(date)" :key="row.key" class="slot d-flex align-start px-4 py-1">
-        <div class="slot-name text-body-2 text-medium-emphasis">{{ row.name }}</div>
-        <div class="flex-grow-1 meals">
-          <div v-for="m in row.meals" :key="m.id" class="meal d-flex align-center" :class="{ prepared: m.status === 'prepared', other: m.kind !== 'dish' }" @click="openMeal(m)">
-            <v-icon :icon="mealIcon(m)" size="small" class="mr-2 text-medium-emphasis" />
-            <span class="meal-name">{{ mealLabel(m) }}</span>
-            <v-icon v-if="m.tripId" icon="mdi-cart-check" size="x-small" class="ml-2 text-medium-emphasis" title="steht auf einer Einkaufsliste" />
-            <v-icon v-if="m.status === 'prepared'" icon="mdi-check" size="small" color="primary" class="ml-2" title="zubereitet" />
-            <span v-if="m.kind === 'dish' && m.dishKind !== 'takeaway'" class="servings text-body-2 text-medium-emphasis">
-              <v-icon icon="mdi-silverware-fork-knife" size="x-small" class="mr-1" />{{ formatNumber(m.servings) }}
-            </span>
-          </div>
+      <div v-for="row in rowsFor(date)" :key="row.key" class="slot px-4">
+        <div class="slot-head d-flex align-center">
+          <span class="slot-name">{{ row.name }}</span>
+          <v-spacer />
+          <v-btn icon="mdi-plus" size="x-small" variant="text" class="add-btn" :aria-label="`${row.name} hinzufügen`" @click="addMeal(date, row.slotId, row.label)" />
         </div>
-        <v-btn icon="mdi-plus" size="small" variant="text" class="add-btn" :aria-label="`${row.name} hinzufügen`" @click="addMeal(date, row.slotId, row.label)" />
+        <div v-for="m in row.meals" :key="m.id" class="meal d-flex align-center" :class="{ prepared: m.status === 'prepared', other: m.kind !== 'dish' }" @click="openMeal(m)">
+          <v-icon :icon="mealIcon(m)" size="small" class="mr-2 text-medium-emphasis" />
+          <span class="meal-name">{{ mealLabel(m) }}</span>
+          <v-icon v-if="m.tripId" icon="mdi-cart-check" size="x-small" class="ml-2 text-medium-emphasis" title="steht auf einer Einkaufsliste" />
+          <v-icon v-if="m.status === 'prepared'" icon="mdi-check" size="small" color="primary" class="ml-2" title="zubereitet" />
+          <span v-if="m.kind === 'dish' && m.dishKind !== 'takeaway'" class="servings text-body-2 text-medium-emphasis">
+            <v-icon icon="mdi-silverware-fork-knife" size="x-small" class="mr-1" />{{ formatNumber(m.servings) }}
+          </span>
+        </div>
       </div>
       <div class="px-2 pb-2">
         <v-menu>
@@ -210,14 +211,14 @@ onMounted(async () => {
 .trip-banner { background: linear-gradient(120deg, rgba(37, 99, 235, 0.10), rgba(79, 70, 229, 0.10)); box-shadow: none !important; }
 .day.today { border-left: 4px solid rgb(var(--v-theme-primary)); }
 .day.past { opacity: 0.7; }
-.slot { min-height: 52px; }
-.slot-name { width: 96px; flex-shrink: 0; padding-top: 8px; }
-.meals { min-width: 0; }
-.meal { padding: 6px 4px 6px 0; cursor: pointer; border-radius: 6px; }
+.slot { padding-bottom: 6px; }
+.slot-head { min-height: 28px; }
+.slot-name { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(var(--v-theme-on-surface), 0.5); }
+.meal { padding: 5px 4px 5px 2px; cursor: pointer; border-radius: 8px; min-height: 34px; }
 .meal:hover { background: rgba(var(--v-theme-primary), 0.05); }
-.meal-name { flex-grow: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.meal-name { flex-grow: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .meal.prepared .meal-name { color: rgba(var(--v-theme-on-surface), 0.55); font-weight: 400; }
 .meal.other .meal-name { font-style: italic; font-weight: 400; }
 .servings { margin-left: 16px; white-space: nowrap; }
-.add-btn { margin-left: 8px; flex-shrink: 0; }
+.add-btn { margin-right: -6px; }
 </style>
