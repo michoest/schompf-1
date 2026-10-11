@@ -7,7 +7,7 @@ import { fileURLToPath, URL } from 'node:url'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const appName = env.VITE_APP_NAME || 'Schompf'
-  const themeColor = env.VITE_THEME_COLOR || '#0D9488'
+  const themeColor = env.VITE_THEME_COLOR || '#2563EB'
 
   return {
     define: {
@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => {
         name: 'html-app-name',
         transformIndexHtml: html => html
           .replaceAll('Schompf - Mahlzeitenplanung', `${appName} - Mahlzeitenplanung`)
-          .replaceAll('#0D9488', themeColor)
+          .replaceAll('#0D9488', themeColor).replaceAll('#2563EB', themeColor)
       },
       VitePWA({
         registerType: 'autoUpdate',

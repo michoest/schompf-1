@@ -47,7 +47,9 @@ const recipeHtml = block => renderRecipe(
     <div class="d-flex align-start mb-3">
       <div class="flex-grow-1">
         <h1 class="text-h5">{{ dish.name }}</h1>
-        <div class="text-caption text-medium-emphasis">{{ dish.categories.join(', ') }}<span v-if="dish.status === 'draft'"> · Entwurf</span></div>
+        <div class="text-caption text-medium-emphasis">
+          {{ dish.categories.join(', ') }}<span v-if="dish.totalMinutes"> · ca. {{ dish.totalMinutes }} Min.</span><span v-if="dish.status === 'draft'"> · Entwurf</span>
+        </div>
       </div>
       <v-btn icon="mdi-pencil-outline" variant="text" @click="router.push(`/verwaltung/gerichte/${dish.id}`)" />
     </div>
