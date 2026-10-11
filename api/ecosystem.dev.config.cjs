@@ -6,6 +6,7 @@ module.exports = {
         env: {
             NODE_ENV: 'production',
             TZ: 'Europe/Berlin',
+            SCHEDULER: 'off', // Erinnerungen nur von der echten App
             PORT: 3010,
         },
         exp_backoff_restart_delay: 100,
