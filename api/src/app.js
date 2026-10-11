@@ -10,12 +10,15 @@ import {
   setTripItem, addFreeItem, updateFreeItem, deleteFreeItem,
 } from './repo/trips.js';
 import { createEventHub } from './events.js';
+import { addFeedback, listFeedback, resolveFeedback } from './repo/feedback.js';
+import { TYPES, pushConfigured, sendPush, createPlanNotifier } from './notifications.js';
 
 /** Express-App auf einer geöffneten Datenbank (Tests übergeben eine In-Memory-DB). */
 export function createApp(db, { corsOrigins = ['http://localhost:5173'] } = {}) {
   const app = express();
   const events = createEventHub();
   app.locals.events = events;
+  const planNotifier = createPlanNotifier(db);
   app.use(cors({ origin: corsOrigins }));
   app.use(express.json({ limit: '1mb' }));
 
@@ -78,7 +81,11 @@ export function createApp(db, { corsOrigins = ['http://localhost:5173'] } = {}) 
   // Mahlzeiten
   app.get('/api/meals', (req, res) => res.json(listMeals(db, { from: req.query.from, to: req.query.to })));
   app.get('/api/meals/:id', (req, res) => sendOr404(res, getMeal(db, req.params.id)));
-  app.post('/api/meals', (req, res) => res.status(201).json(saveMeal(db, req.body, { personId: req.person.id })));
+  app.post('/api/meals', (req, res) => {
+    const meal = saveMeal(db, req.body, { personId: req.person.id });
+    planNotifier.mealPlanned(req.person, meal.date);
+    res.status(201).json(meal);
+  });
   app.put('/api/meals/:id', (req, res) => sendOr404(res, saveMeal(db, req.body, { id: req.params.id, personId: req.person.id })));
   app.delete('/api/meals/:id', (req, res) => res.status(deleteMeal(db, req.params.id) ? 204 : 404).end());
 
@@ -93,7 +100,11 @@ export function createApp(db, { corsOrigins = ['http://localhost:5173'] } = {}) 
     const trip = getTrip(db, req.params.id);
     sendOr404(res, trip && buildTripList(db, trip));
   });
-  app.post('/api/trips', (req, res) => res.status(201).json(buildTripList(db, createTrip(db, req.body, req.person.id))));
+  app.post('/api/trips', (req, res) => {
+    const trip = createTrip(db, req.body, req.person.id);
+    planNotifier.tripCreated(req.person, trip);
+    res.status(201).json(buildTripList(db, trip));
+  });
   app.put('/api/trips/:id', (req, res) => {
     const trip = updateTrip(db, req.params.id, req.body);
     sendOr404(res, trip && buildTripList(db, trip));
@@ -107,6 +118,42 @@ export function createApp(db, { corsOrigins = ['http://localhost:5173'] } = {}) 
   app.post('/api/free-items', (req, res) => res.status(201).json(addFreeItem(db, { ...req.body, tripId: null }, req.person.id)));
   app.put('/api/free-items/:id', (req, res) => sendOr404(res, updateFreeItem(db, req.params.id, req.body)));
   app.delete('/api/free-items/:id', (req, res) => res.status(deleteFreeItem(db, req.params.id) ? 204 : 404).end());
+
+  // Anmerkungen (Feedback) zu Gerichten oder allgemein
+  app.get('/api/feedback', (req, res) => res.json(listFeedback(db, { status: req.query.status ?? null, dishId: req.query.dishId ?? null })));
+  app.post('/api/feedback', (req, res) => res.status(201).json(addFeedback(db, req.body, req.person.id)));
+  app.put('/api/feedback/:id', (req, res) => sendOr404(res, resolveFeedback(db, req.params.id, req.body)));
+
+  // Benachrichtigungen (Web-Push) dieses Geräts
+  app.get('/api/push/config', (req, res) => {
+    const device = db.prepare('SELECT notify FROM devices WHERE id = ?').get(req.device.id);
+    const subscribed = db.prepare('SELECT COUNT(*) n FROM push_subscriptions WHERE device_id = ?').get(req.device.id).n > 0;
+    res.json({ enabled: pushConfigured(), publicKey: process.env.VAPID_PUBLIC_KEY ?? null, subscribed, settings: JSON.parse(device.notify) });
+  });
+  app.post('/api/push/subscribe', (req, res) => {
+    const { endpoint, keys } = req.body.subscription ?? {};
+    if (!endpoint || !keys?.p256dh || !keys?.auth) throw new ValidationError(['Abo unvollständig']);
+    db.prepare(`INSERT INTO push_subscriptions (endpoint, device_id, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (endpoint) DO UPDATE SET device_id = excluded.device_id, p256dh = excluded.p256dh, auth = excluded.auth`)
+      .run(endpoint, req.device.id, keys.p256dh, keys.auth, new Date().toISOString());
+    res.status(201).json({ subscribed: true });
+  });
+  app.delete('/api/push/subscribe', (req, res) => {
+    db.prepare('DELETE FROM push_subscriptions WHERE device_id = ?').run(req.device.id);
+    res.status(204).end();
+  });
+  app.put('/api/push/settings', (req, res) => {
+    const current = JSON.parse(db.prepare('SELECT notify FROM devices WHERE id = ?').get(req.device.id).notify);
+    for (const type of TYPES) if (type in req.body) current[type] = !!req.body[type];
+    db.prepare('UPDATE devices SET notify = ? WHERE id = ?').run(JSON.stringify(current), req.device.id);
+    res.json(current);
+  });
+  app.post('/api/push/test', async (req, res, next) => {
+    try {
+      const sent = await sendPush(db, { type: 'test', key: 'test', title: 'Schompf', body: 'So sehen Benachrichtigungen aus.', url: '/kochen' }, { deviceId: req.device.id });
+      res.json({ sent });
+    } catch (e) { next(e); }
+  });
 
   app.use((req, res) => res.status(404).json({ error: 'Nicht gefunden' }));
 

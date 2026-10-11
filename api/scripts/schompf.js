@@ -11,6 +11,9 @@
  *   person <Name>                  Person anlegen
  *   umbenennen <Alt> <Neu>         Person umbenennen
  *   code <Person>                  Anmeldecode für ein neues Gerät (24 h gültig)
+ *   feedback [alle]                offene (bzw. alle) Anmerkungen
+ *   erledigt <ID> [Notiz]          Anmerkung als erledigt markieren (ID-Anfang genügt)
+ *   vapid                          neue Schlüssel für Benachrichtigungen (Zeilen für .env)
  *   geraete                        angemeldete Geräte
  *   abmelden <Geräte-ID>           Gerät abmelden
  */
@@ -22,6 +25,8 @@ import { getDish, listDishes, saveDish, getDishChanges, ValidationError } from '
 import { dishToFile, fileToDish } from '../src/domain/dishFile.js';
 import { dishOverviewCsv } from '../src/domain/overview.js';
 import { createPerson, createPairingCode, listDevices, revokeDevice } from '../src/repo/auth.js';
+import { listFeedback, resolveFeedback } from '../src/repo/feedback.js';
+import webpush from 'web-push';
 
 class Rollback extends Error {}
 
@@ -90,6 +95,27 @@ try {
     case 'code': {
       const { code, person, expiresAt } = createPairingCode(db, args.join(' '));
       console.log(`Anmeldecode für ${person.name}: ${code} (gültig bis ${new Date(expiresAt).toLocaleString('de-DE')})`);
+      break;
+    }
+    case 'feedback': {
+      const items = listFeedback(db, { status: args[0] === 'alle' ? null : 'open' });
+      if (!items.length) console.log('Keine offenen Anmerkungen');
+      for (const f of items) {
+        console.log(`[${f.id.slice(0, 8)}] ${f.createdAt.slice(0, 16).replace('T', ' ')}  ${f.person ?? '?'} → ${f.dishName ?? 'allgemein'}${f.status === 'done' ? '  (erledigt)' : ''}`);
+        console.log(`    ${f.text.replace(/\n/g, '\n    ')}`);
+        if (f.resolution) console.log(`    ✓ ${f.resolution}`);
+      }
+      break;
+    }
+    case 'erledigt': {
+      const [id, ...note] = args;
+      const f = resolveFeedback(db, id ?? '', { status: 'done', resolution: note.join(' ') || null });
+      console.log(f ? `Erledigt: ${f.dishName ?? 'allgemein'} – ${f.text.slice(0, 60)}` : 'Anmerkung nicht gefunden');
+      break;
+    }
+    case 'vapid': {
+      const keys = webpush.generateVAPIDKeys();
+      console.log(`VAPID_PUBLIC_KEY=${keys.publicKey}\nVAPID_PRIVATE_KEY=${keys.privateKey}`);
       break;
     }
     case 'geraete':
