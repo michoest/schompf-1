@@ -12,12 +12,12 @@ export function dishOverviewCsv(db, dishes) {
   const stats = new Map(db.prepare(`SELECT dish_id, COUNT(*) AS planned, SUM(status = 'prepared') AS prepared, MAX(date) AS last
                                     FROM meals WHERE kind = 'dish' AND date <= date('now') GROUP BY dish_id`).all()
     .map(r => [r.dish_id, r]));
-  const header = ['Name', 'Art', 'Status', 'Portionen', 'Kategorien', 'Zutaten', 'Bestandteile', 'Beilagen',
+  const header = ['Name', 'Art', 'Status', 'Portionen', 'Zeit (Min.)', 'Kategorien', 'Zutaten', 'Bestandteile', 'Beilagen',
     'Vorbereitungen', 'Rezept', 'Quelle', 'Gegessen', 'Zuletzt'];
   const rows = dishes.map(d => {
     const s = stats.get(d.id);
     return [
-      d.name, KIND[d.kind], STATUS[d.status], formatNumber(d.servings), d.categories.join(', '),
+      d.name, KIND[d.kind], STATUS[d.status], formatNumber(d.servings), d.totalMinutes ?? '', d.categories.join(', '),
       d.ingredients.map(formatIngredientLine).join('\n'),
       d.components.filter(c => !c.optional).map(c => `${c.dishName} × ${formatNumber(c.factor)}`).join('\n'),
       d.components.filter(c => c.optional).map(c => `${c.dishName} × ${formatNumber(c.factor)}`).join('\n'),

@@ -40,7 +40,10 @@
   "shoppingWeekdays": [3, 6],
   "mealSlots": [
     { "id": "breakfast", "name": "Frühstück", "time": "08:00" },
+    { "id": "snack-morning", "name": "Snack vormittags", "optional": true },
     { "id": "lunch", "name": "Mittagessen", "time": "12:00" },
-    { "id": "dinner", "name": "Abendessen", "time": "17:00" }
+    { "id": "snack-afternoon", "name": "Snack nachmittags", "optional": true },
+    { "id": "dinner", "name": "Abendessen", "time": "17:00" },
+    { "id": "snack-evening", "name": "Spätsnack", "optional": true }
   ]
 }

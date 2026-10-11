@@ -88,6 +88,7 @@ CREATE TABLE dishes (
   source_url     TEXT,
   takeaway_where TEXT,
   recipe         TEXT,
+  total_minutes  INTEGER,        -- Zubereitungszeit gesamt (geschätzt), für Anzeige und Sortierung
   created_at     TEXT NOT NULL,
   updated_at     TEXT NOT NULL
 );
@@ -143,10 +144,11 @@ CREATE INDEX dish_changes_dish ON dish_changes(dish_id);
 -- Planung -------------------------------------------------------------------
 
 CREATE TABLE meal_slots (
-  id   TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  sort INTEGER NOT NULL,
-  time TEXT NOT NULL           -- HH:MM, Kochzeit für Erinnerungen
+  id       TEXT PRIMARY KEY,
+  name     TEXT NOT NULL,
+  sort     INTEGER NOT NULL,
+  time     TEXT,                  -- HH:MM, Kochzeit für Erinnerungen
+  optional INTEGER NOT NULL DEFAULT 0  -- 1 = nur bei Bedarf (z.B. Snack), im Plan nur sichtbar, wenn belegt
 );
 
 CREATE TABLE meals (

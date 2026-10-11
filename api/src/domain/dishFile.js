@@ -6,6 +6,7 @@
  *   art: kochen            # kochen | fertig | holen
  *   status: aktiv          # aktiv | entwurf
  *   portionen: 2           # übliche Anzahl beim Planen; Mengen gelten pro Portion
+ *   zeit: 30               # Zubereitungszeit gesamt in Minuten
  *   kategorien: [Dels]
  *   zutaten:
  *     - 125 g Ghetti
@@ -37,6 +38,7 @@ export function dishToFile(dish) {
     status: STATUS_TO_FILE[dish.status],
     portionen: dish.servings,
   };
+  if (dish.totalMinutes) head.zeit = dish.totalMinutes;
   if (dish.categories.length) head.kategorien = dish.categories;
   if (dish.sourceUrl) head.quelle = dish.sourceUrl;
   if (dish.takeawayWhere) head.wo = dish.takeawayWhere;
@@ -87,6 +89,7 @@ export function fileToDish(text) {
     name: head.name != null ? String(head.name).trim() : undefined,
     kind, status,
     servings: head.portionen,
+    ...('zeit' in head ? { totalMinutes: head.zeit } : {}),
     categories: (head.kategorien ?? []).map(String),
     sourceUrl: head.quelle ?? null,
     takeawayWhere: head.wo ?? null,

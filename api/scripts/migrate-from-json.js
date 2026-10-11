@@ -8,8 +8,10 @@
  *
  * Grundstruktur (Läden, Warengruppen, Lagerorte, Slots) kommt aus seed/struktur.json,
  * die Produkt-Zuordnung aus der Mapping-Datei (nicht im Git, enthält Haushaltsdaten).
- * Überarbeitete Gerichte (Rezepte etc.) aus data/migration/gerichte/*.md werden zuletzt eingespielt,
- * damit inhaltliche Arbeit vor dem Umstieg nicht verloren geht.
+ * Inhaltliche Arbeit vor dem Umstieg wird zuletzt eingespielt (alles in data/migration/, nicht im Git):
+ *   rezepte/<Gericht>.md  – nur der Rezepttext für ein bestehendes Gericht (Zutaten kommen frisch aus db.json)
+ *   gerichte/<Gericht>.md – komplette Gerichte (neu oder vollständig überarbeitet)
+ *   zeiten.json           – Zubereitungszeit in Minuten pro Gericht
  */
 import { readFileSync, existsSync, rmSync } from 'fs';
 import { dirname, join } from 'path';
@@ -64,7 +66,9 @@ db.transaction(() => {
   migrateMeals(dishes);
   migrateFreeItems(products, ids);
 })();
+applyRecipeFiles(join(dirname(args.mapping), 'rezepte'));
 applyDishFiles(join(dirname(args.mapping), 'gerichte'));
+applyTimes(join(dirname(args.mapping), 'zeiten.json'));
 if (args['keep-auth']) keepAuth(args['keep-auth']);
 
 db.close();
@@ -112,7 +116,7 @@ function seedStructure() {
   db.prepare("INSERT INTO settings (key, value) VALUES ('shoppingWeekdays', ?)").run(JSON.stringify(structure.shoppingWeekdays));
 
   structure.mealSlots.forEach((slot, i) => {
-    db.prepare('INSERT INTO meal_slots (id, name, sort, time) VALUES (?, ?, ?, ?)').run(slot.id, slot.name, i, slot.time);
+    db.prepare('INSERT INTO meal_slots (id, name, sort, time, optional) VALUES (?, ?, ?, ?, ?)').run(slot.id, slot.name, i, slot.time ?? null, slot.optional ? 1 : 0);
   });
 
   return { storage, stores, sections, groups };
@@ -348,6 +352,34 @@ function migrateFreeItems(products, ids) {
     count++;
   }
   report.counts.freeItems = count;
+}
+
+function applyRecipeFiles(dir) {
+  if (!existsSync(dir)) return;
+  let count = 0;
+  for (const file of readdirSync(dir).filter(f => f.endsWith('.md')).sort()) {
+    const name = file.replace(/\.md$/, '');
+    const dish = db.prepare('SELECT id FROM dishes WHERE name = ?').get(name);
+    if (!dish) { warn(`Rezept-Datei ${file}: Gericht nicht gefunden`); continue; }
+    try {
+      const { summary } = saveDish(db, { id: dish.id, recipe: readFileSync(join(dir, file), 'utf8').trim() }, { source: 'migration' });
+      if (summary) count++;
+    } catch (e) {
+      warn(`Rezept-Datei ${file}: ${e.messages?.join('; ') ?? e.message}`);
+    }
+  }
+  report.counts.recipesApplied = count;
+}
+
+function applyTimes(path) {
+  if (!existsSync(path)) return;
+  const times = JSON.parse(readFileSync(path, 'utf8'));
+  let count = 0;
+  for (const [name, minutes] of Object.entries(times)) {
+    const changed = db.prepare('UPDATE dishes SET total_minutes = ? WHERE name = ?').run(minutes, name).changes;
+    if (changed) count++; else warn(`Zeiten: Gericht „${name}“ nicht gefunden`);
+  }
+  report.counts.timesApplied = count;
 }
 
 function applyDishFiles(dir) {

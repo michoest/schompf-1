@@ -17,7 +17,7 @@ export function getStructure(db) {
     })),
     groups: db.prepare(`SELECT id, name, storage_location_id AS storageLocationId, preferred_store_id AS preferredStoreId,
                         fallback_store_id AS fallbackStoreId FROM product_groups ORDER BY sort`).all(),
-    mealSlots: db.prepare('SELECT id, name, time FROM meal_slots ORDER BY sort').all(),
+    mealSlots: db.prepare('SELECT id, name, time, optional FROM meal_slots ORDER BY sort').all().map(s => ({ ...s, optional: !!s.optional })),
     units: UNITS.map(u => ({ code: u.code, singular: u.singular, plural: u.plural })),
   };
 }
