@@ -115,9 +115,9 @@ function mealLabel(m) {
 // gleiche Symbole wie im Mahlzeit-Dialog
 function mealIcon(m) {
   if (m.kind === 'leftovers') return 'mdi-recycle'
-  if (m.kind === 'text') return 'mdi-dots-horizontal-circle-outline'
+  if (m.kind === 'text') return 'mdi-room-service-outline'
   if (m.dishKind === 'takeaway') return 'mdi-moped-outline'
-  return null
+  return 'mdi-pot-steam-outline'
 }
 
 watch(() => [live.version.meals, live.version.trips], load)
@@ -157,9 +157,9 @@ onMounted(async () => {
         <div class="slot-name text-body-2 text-medium-emphasis">{{ row.name }}</div>
         <div class="flex-grow-1 meals">
           <div v-for="m in row.meals" :key="m.id" class="meal d-flex align-center" :class="{ prepared: m.status === 'prepared', other: m.kind !== 'dish' }" @click="openMeal(m)">
-            <v-icon v-if="m.status === 'prepared'" icon="mdi-check" size="small" color="primary" class="mr-2" />
-            <v-icon v-else-if="mealIcon(m)" :icon="mealIcon(m)" size="small" class="mr-2 text-medium-emphasis" />
+            <v-icon :icon="mealIcon(m)" size="small" class="mr-2 text-medium-emphasis" />
             <span class="meal-name">{{ mealLabel(m) }}</span>
+            <v-icon v-if="m.status === 'prepared'" icon="mdi-check" size="small" color="primary" class="ml-2" title="zubereitet" />
             <span v-if="m.kind === 'dish' && m.dishKind !== 'takeaway'" class="servings text-body-2 text-medium-emphasis">
               <v-icon icon="mdi-silverware-fork-knife" size="x-small" class="mr-1" />{{ formatNumber(m.servings) }}
             </span>
