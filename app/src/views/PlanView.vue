@@ -159,6 +159,7 @@ onMounted(async () => {
           <div v-for="m in row.meals" :key="m.id" class="meal d-flex align-center" :class="{ prepared: m.status === 'prepared', other: m.kind !== 'dish' }" @click="openMeal(m)">
             <v-icon :icon="mealIcon(m)" size="small" class="mr-2 text-medium-emphasis" />
             <span class="meal-name">{{ mealLabel(m) }}</span>
+            <v-icon v-if="m.tripId" icon="mdi-cart-check" size="x-small" class="ml-2 text-medium-emphasis" title="steht auf einer Einkaufsliste" />
             <v-icon v-if="m.status === 'prepared'" icon="mdi-check" size="small" color="primary" class="ml-2" title="zubereitet" />
             <span v-if="m.kind === 'dish' && m.dishKind !== 'takeaway'" class="servings text-body-2 text-medium-emphasis">
               <v-icon icon="mdi-silverware-fork-knife" size="x-small" class="mr-1" />{{ formatNumber(m.servings) }}

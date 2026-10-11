@@ -34,6 +34,12 @@ const busy = ref(false)
 const confirmDelete = ref(false)
 const showDetails = ref(null)
 
+// Einkaufsliste: nur mitändern, wenn ausdrücklich gewählt (Vorschau zeigt, was sich ändern würde)
+const preview = ref(null)        // { trip, committed, done, delta[] }
+const syncTrip = ref(true)
+const removePreview = ref(null)  // Vorschau fürs Löschen
+let previewTimer = null
+
 const QUICK_MINUTES = 30
 const kinds = [
   { value: 'dish', title: 'Gericht', icon: 'mdi-pot-steam-outline' },
@@ -86,7 +92,32 @@ watch(open, isOpen => {
   category.value = null
   confirmDelete.value = false
   showDetails.value = null
+  preview.value = null
+  removePreview.value = null
+  syncTrip.value = true
+  schedulePreview()
 })
+
+const tripLabel = computed(() => preview.value?.trip ? `vom ${shortDate(preview.value.trip.date)}` : '')
+const deltaText = computed(() => (preview.value?.delta ?? []).map(d => `${d.display} ${d.name}`).join(', '))
+// Kästchen nur, wenn sich an der Liste etwas ändern würde und der Einkauf noch offen ist
+const offerSync = computed(() => !!preview.value?.trip && !preview.value.done && (preview.value.delta.length > 0 || (!preview.value.committed && kind.value === 'dish')))
+
+function schedulePreview() {
+  clearTimeout(previewTimer)
+  previewTimer = setTimeout(async () => {
+    if (!open.value || (kind.value === 'dish' && !dishId.value)) { preview.value = null; return }
+    try {
+      preview.value = await api.previewMeal({ id: props.meal?.id ?? null, ...payload() })
+    } catch { preview.value = null }
+  }, 250)
+}
+watch([kind, dishId, servings, chosen, included, date], schedulePreview, { deep: true })
+
+async function askRemove() {
+  confirmDelete.value = true
+  try { removePreview.value = await api.previewMeal({ id: props.meal.id, remove: true }) } catch { removePreview.value = null }
+}
 
 function chooseDish(d) {
   dishId.value = d.id
@@ -124,7 +155,7 @@ function payload() {
 async function save(extra = {}) {
   busy.value = true
   try {
-    const body = { ...payload(), ...extra }
+    const body = { ...payload(), ...extra, syncTrip: offerSync.value && syncTrip.value }
     const saved = props.meal ? await api.updateMeal(props.meal.id, body) : await api.createMeal(body)
     emit('saved', saved)
     open.value = false
@@ -138,7 +169,8 @@ async function save(extra = {}) {
 async function remove() {
   busy.value = true
   try {
-    await api.deleteMeal(props.meal.id)
+    const removeFromList = !!removePreview.value?.trip && !removePreview.value.done && removePreview.value.delta.length > 0 && syncTrip.value
+    await api.deleteMeal(props.meal.id, removeFromList)
     emit('saved', null)
     open.value = false
   } catch (e) {
@@ -264,10 +296,34 @@ async function remove() {
         </template>
       </v-card-text>
 
+      <!-- Einkaufsliste -->
+      <div v-if="confirmDelete && removePreview?.trip && !removePreview.done && removePreview.delta.length" class="trip-sync px-4 py-2">
+        <v-checkbox v-model="syncTrip" hide-details density="compact" color="primary">
+          <template #label>
+            <span class="text-body-2">Zutaten von der Einkaufsliste {{ `vom ${shortDate(removePreview.trip.date)}` }} nehmen
+              <span class="text-medium-emphasis">({{ removePreview.delta.map(d => `${d.display} ${d.name}`).join(', ') }})</span></span>
+          </template>
+        </v-checkbox>
+      </div>
+      <div v-else-if="!confirmDelete && offerSync" class="trip-sync px-4 py-2">
+        <v-checkbox v-model="syncTrip" hide-details density="compact" color="primary">
+          <template #label>
+            <span class="text-body-2">
+              {{ preview.committed ? 'Einkaufsliste' : 'Auf die Einkaufsliste' }} {{ tripLabel }}{{ preview.committed ? ' anpassen' : '' }}
+              <span v-if="deltaText" class="text-medium-emphasis">({{ deltaText }})</span>
+            </span>
+          </template>
+        </v-checkbox>
+      </div>
+      <div v-else-if="!confirmDelete && preview?.committed" class="trip-sync px-4 py-3 text-body-2 text-medium-emphasis">
+        <v-icon icon="mdi-cart-check" size="small" class="mr-1" />
+        {{ preview.done ? `Eingekauft (Einkauf ${tripLabel})` : `Steht auf der Einkaufsliste ${tripLabel}` }}
+      </div>
+
       <v-divider />
       <v-card-actions class="actions px-4 py-3">
         <template v-if="isEdit">
-          <v-btn v-if="!confirmDelete" icon="mdi-delete-outline" color="error" variant="text" aria-label="Löschen" @click="confirmDelete = true" />
+          <v-btn v-if="!confirmDelete" icon="mdi-delete-outline" color="error" variant="text" aria-label="Löschen" @click="askRemove" />
           <v-btn v-else color="error" variant="flat" :loading="busy" @click="remove">Löschen</v-btn>
           <v-btn v-if="status === 'planned'" variant="text" prepend-icon="mdi-check" :loading="busy" @click="save({ status: 'prepared' })">Zubereitet</v-btn>
           <v-btn v-else variant="text" :loading="busy" @click="save({ status: 'planned' })">Nicht zubereitet</v-btn>
@@ -289,5 +345,6 @@ async function remove() {
 .amount { min-width: 88px; text-align: right; margin-right: 12px; }
 .recipe :deep(ol), .recipe :deep(ul) { padding-left: 1.3em; }
 .recipe :deep(li) { margin-bottom: 0.5em; line-height: 1.45; }
+.trip-sync { background: rgba(var(--v-theme-primary), 0.05); }
 .actions { padding-bottom: calc(12px + env(safe-area-inset-bottom)) !important; }
 </style>

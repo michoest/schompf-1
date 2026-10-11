@@ -48,7 +48,8 @@ async function save() {
     <v-card :title="trip ? 'Einkauf ändern' : 'Einkauf erstellen'">
       <v-card-text>
         <p v-if="!trip" class="text-body-2 mb-4">
-          Die Liste wird aus allen Gerichten im Zeitraum berechnet und passt sich an, wenn ihr den Plan noch ändert.
+          Alle geplanten Gerichte im Zeitraum, die noch auf keiner Liste stehen, kommen auf die Liste.
+          Ändert ihr danach den Plan, fragt die App jeweils, ob die Liste mitgehen soll.
         </p>
         <v-text-field v-model="date" type="date" label="Einkaufstag" />
         <div class="d-flex ga-3">

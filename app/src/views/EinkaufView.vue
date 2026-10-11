@@ -216,7 +216,7 @@ function onTripSaved(result) {
 
 const sourceLabel = s => s.type === 'manual'
   ? `von Hand${s.by ? ` (${s.by})` : ''}: ${s.amount != null ? formatAmount(s.amount, s.unit, data.units) : ''}`
-  : `${shortDate(s.date)} ${s.slotName}: ${s.dishName}${s.viaDish ? ` (${s.viaDish})` : ''} – ${formatAmount(s.amount, s.unit, data.units)}`
+  : `${shortDate(s.date)} ${s.slotName}: ${s.dishName}${s.viaDish ? ` (${s.viaDish})` : ''} – ${formatAmount(s.amount, s.unit, data.units)}${s.isNew ? ' · neu' : ''}${s.mealId ? '' : ' · Mahlzeit gelöscht'}`
 </script>
 
 <template>
@@ -309,7 +309,7 @@ const sourceLabel = s => s.type === 'manual'
               <template #prepend>
                 <v-icon :icon="item.state === 'in_cart' ? 'mdi-checkbox-marked-circle' : 'mdi-checkbox-blank-circle-outline'" :color="item.state === 'in_cart' ? 'primary' : undefined" />
               </template>
-              <v-list-item-title>{{ item.name }}</v-list-item-title>
+              <v-list-item-title>{{ item.name }}<v-chip v-if="item.isNew" size="x-small" color="primary" variant="tonal" class="ml-2">neu</v-chip></v-list-item-title>
               <v-list-item-subtitle v-if="item.useFallback">statt {{ preferredName(item) }}</v-list-item-subtitle>
               <template #append>
                 <span class="text-body-2 text-medium-emphasis mr-1">{{ item.display }}</span>
