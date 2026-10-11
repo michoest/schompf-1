@@ -12,11 +12,9 @@ if [ "$(git rev-parse dev)" != "$(git rev-parse origin/dev)" ]; then
 fi
 
 REFRESH_DB="${1:-}"
-# Produkt-Zuordnung für die Übernahme liegt nicht im Git (Haushaltsdaten) → mitkopieren
-scp -q api/data/migration/produkte.json pi5:dev/schompf-dev/api/data/migration/produkte.json 2>/dev/null \
-  || { ssh pi5 'mkdir -p ~/dev/schompf-dev/api/data/migration' && scp -q api/data/migration/produkte.json pi5:dev/schompf-dev/api/data/migration/produkte.json; }
-# Überarbeitete Gerichte (Rezepte), die bei jeder Übernahme zuletzt eingespielt werden
-rsync -a --delete api/data/migration/gerichte/ pi5:dev/schompf-dev/api/data/migration/gerichte/ 2>/dev/null || true
+# Übernahme-Daten (Produkt-Zuordnung, Rezepte, Gerichte, Zeiten) liegen nicht im Git (Haushaltsdaten) → mitkopieren
+ssh pi5 'mkdir -p ~/dev/schompf-dev/api/data/migration'
+rsync -a --delete api/data/migration/ pi5:dev/schompf-dev/api/data/migration/
 ssh pi5 "REFRESH_DB=$REFRESH_DB bash -s" <<'REMOTE'
 set -euo pipefail
 cd ~/dev/schompf-dev
