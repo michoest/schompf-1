@@ -4,6 +4,7 @@ module.exports = {
         script: 'src/server.js',
         env: {
             NODE_ENV: 'production',
+            TZ: 'Europe/Berlin',
             PORT: 3000,
         },
         // Restart behavior

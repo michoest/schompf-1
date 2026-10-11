@@ -11,6 +11,8 @@ const routes = [
   { path: '/verwaltung/gerichte', name: 'gerichte', component: () => import('@/views/GerichteView.vue'), meta: { title: 'Gerichte' } },
   { path: '/verwaltung/gerichte/:id', name: 'gericht-bearbeiten', component: () => import('@/views/GerichtEditView.vue'), meta: { title: 'Gericht bearbeiten', back: true } },
   { path: '/verwaltung/produkte', name: 'produkte', component: () => import('@/views/ProdukteView.vue'), meta: { title: 'Produkte' } },
+  { path: '/einstellungen/benachrichtigungen', name: 'benachrichtigungen', component: () => import('@/views/BenachrichtigungenView.vue'), meta: { title: 'Benachrichtigungen' } },
+  { path: '/verwaltung/anmerkungen', name: 'anmerkungen', component: () => import('@/views/AnmerkungenView.vue'), meta: { title: 'Anmerkungen' } },
   { path: '/verwaltung/laeden', name: 'laeden', component: () => import('@/views/LaedenView.vue'), meta: { title: 'Läden & Warengruppen' } },
   // alte Pfade (Lesezeichen / installierte App)
   { path: '/planer', redirect: '/plan' },

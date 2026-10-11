@@ -85,6 +85,16 @@ export default {
   updateFreeItem: (id, data) => put(`/api/free-items/${id}`, data),
   deleteFreeItem: id => del(`/api/free-items/${id}`),
 
+  feedback: (params = {}) => get(`/api/feedback?${new URLSearchParams(params)}`),
+  addFeedback: (text, dishId = null) => post('/api/feedback', { text, dishId }),
+  updateFeedback: (id, data) => put(`/api/feedback/${id}`, data),
+
+  pushConfig: () => get('/api/push/config'),
+  pushSubscribe: subscription => post('/api/push/subscribe', { subscription }),
+  pushUnsubscribe: () => del('/api/push/subscribe'),
+  pushSettings: settings => put('/api/push/settings', settings),
+  pushTest: () => post('/api/push/test'),
+
   /** Live-Sync: ruft onChange({ scope, by, deviceId }) bei jeder Änderung auf einem Gerät auf. */
   subscribe(onChange) {
     if (!token) return () => {}

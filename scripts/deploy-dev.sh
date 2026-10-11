@@ -21,6 +21,8 @@ cd ~/dev/schompf-dev
 git fetch -q origin && git checkout -q dev && git reset -q --hard origin/dev
 cd api
 npm ci --omit=dev --no-audit --no-fund
+# Schlüssel für Benachrichtigungen einmalig erzeugen (bleiben in .env, nicht im Git)
+grep -q '^VAPID_PUBLIC_KEY=' .env || { node scripts/schompf.js vapid >> .env && echo "VAPID-Schlüssel erzeugt"; }
 if [ "$REFRESH_DB" = "--refresh-db" ] || [ ! -f data/schompf.db ]; then
   pm2 stop schompf-dev-api >/dev/null 2>&1 || true
   cp ~/dev/schompf-1/api/data/db.json data/db.json

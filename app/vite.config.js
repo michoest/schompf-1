@@ -53,9 +53,12 @@ export default defineConfig(({ mode }) => {
             }
           ]
         },
-        workbox: {
+        // eigener Service Worker (src/sw.js) für Benachrichtigungen
+        strategies: 'injectManifest',
+        srcDir: 'src',
+        filename: 'sw.js',
+        injectManifest: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-          navigateFallbackDenylist: [/^\/api\//],
         }
       })
     ],
