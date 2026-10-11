@@ -5,6 +5,7 @@ module.exports = {
         script: 'src/server.js',
         env: {
             NODE_ENV: 'production',
+            TZ: 'Europe/Berlin',
             PORT: 3010,
         },
         exp_backoff_restart_delay: 100,

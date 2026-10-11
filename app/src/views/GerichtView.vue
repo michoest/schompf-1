@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useDataStore } from '@/stores'
 import { formatAmount, formatNumber } from '@/utils/format'
 import { renderRecipe } from '@/utils/recipe'
+import api from '@/services/api'
+import FeedbackDialog from '@/components/FeedbackDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -32,6 +34,15 @@ const blocks = computed(() => {
 })
 
 const scale = block => (servings.value || 1) * block.factor
+
+// Offene Anmerkungen zu diesem Gericht
+const feedback = ref([])
+const feedbackDialog = ref(false)
+async function loadFeedback() {
+  if (!route.params.id) return
+  try { feedback.value = await api.feedback({ dishId: route.params.id, status: 'open' }) } catch { /* egal */ }
+}
+watch(() => route.params.id, loadFeedback, { immediate: true })
 // Weggelassene optionale Zutaten erscheinen im Text nur mit Namen, ohne Menge
 const recipeHtml = block => renderRecipe(
   block.dish.recipe,
@@ -51,7 +62,8 @@ const recipeHtml = block => renderRecipe(
           {{ dish.categories.join(', ') }}<span v-if="dish.totalMinutes"> · ca. {{ dish.totalMinutes }} Min.</span><span v-if="dish.status === 'draft'"> · Entwurf</span>
         </div>
       </div>
-      <v-btn icon="mdi-pencil-outline" variant="text" @click="router.push(`/verwaltung/gerichte/${dish.id}`)" />
+      <v-btn icon="mdi-message-plus-outline" variant="text" aria-label="Anmerkung schreiben" @click="feedbackDialog = true" />
+      <v-btn icon="mdi-pencil-outline" variant="text" aria-label="Bearbeiten" @click="router.push(`/verwaltung/gerichte/${dish.id}`)" />
     </div>
 
     <div v-if="dish.kind !== 'takeaway'" class="mb-4">
@@ -67,6 +79,11 @@ const recipeHtml = block => renderRecipe(
         <a href="#" @click.prevent="servings = planned">Zurück auf {{ formatNumber(planned) }}</a>
       </v-alert>
     </div>
+    <v-alert v-if="feedback.length" type="info" variant="tonal" density="compact" class="mb-3" icon="mdi-message-text-outline">
+      <div v-for="f in feedback" :key="f.id" class="text-body-2">„{{ f.text }}“ <span class="text-caption">– {{ f.person }}</span></div>
+      <div class="text-caption mt-1">Offen – Claude kümmert sich darum.</div>
+    </v-alert>
+
     <p v-if="dish.kind === 'takeaway'" class="text-body-1">Wird geholt<span v-if="dish.takeawayWhere"> – {{ dish.takeawayWhere }}</span>.</p>
 
     <v-card v-for="block in blocks" :key="block.dish.id" class="mb-3">
@@ -91,6 +108,7 @@ const recipeHtml = block => renderRecipe(
         <a v-if="block.dish.recipe && block.dish.sourceUrl" :href="block.dish.sourceUrl" target="_blank" rel="noopener" class="text-caption">Quelle</a>
       </v-card-text>
     </v-card>
+    <FeedbackDialog v-model="feedbackDialog" :dish="dish" @saved="loadFeedback" />
   </div>
 </template>
 
