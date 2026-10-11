@@ -67,8 +67,8 @@ db.transaction(() => {
   migrateFreeItems(products, ids);
 })();
 applyRecipeFiles(join(dirname(args.mapping), 'rezepte'));
-applyDishFiles(join(dirname(args.mapping), 'gerichte'));
 applyTimes(join(dirname(args.mapping), 'zeiten.json'));
+applyDishFiles(join(dirname(args.mapping), 'gerichte'));   // zuletzt: komplette Gerichte gewinnen
 if (args['keep-auth']) keepAuth(args['keep-auth']);
 
 db.close();

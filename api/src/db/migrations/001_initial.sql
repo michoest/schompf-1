@@ -155,6 +155,7 @@ CREATE TABLE meals (
   id         TEXT PRIMARY KEY,
   date       TEXT NOT NULL,    -- YYYY-MM-DD
   slot_id    TEXT NOT NULL REFERENCES meal_slots(id),
+  label      TEXT,             -- eigener Name statt Slot-Name (z.B. „Kaffee & Kuchen“), Position = Slot
   sort       INTEGER NOT NULL DEFAULT 0,
   kind       TEXT NOT NULL CHECK (kind IN ('dish', 'leftovers', 'text')),
   dish_id    TEXT REFERENCES dishes(id),

@@ -18,7 +18,7 @@ const isMobile = computed(() => windowWidth.value < 960)
 const menu = ref(false)
 
 const mainNav = [
-  { title: 'Plan', icon: 'mdi-calendar-week', to: '/plan' },
+  { title: 'Planen', icon: 'mdi-calendar-week', to: '/plan' },
   { title: 'Einkaufen', icon: 'mdi-cart-outline', to: '/einkauf' },
   { title: 'Kochen', icon: 'mdi-pot-steam-outline', to: '/kochen' },
 ]
@@ -73,7 +73,7 @@ onUnmounted(() => {
   <v-app>
     <div class="safe-area-bg" />
 
-    <v-app-bar v-if="showChrome" color="primary" elevation="0" density="comfortable" class="safe-area-top">
+    <v-app-bar v-if="showChrome" color="primary" elevation="0" density="comfortable" class="safe-area-top app-bar-gradient">
       <template #prepend>
         <v-btn v-if="route.meta?.back" icon="mdi-arrow-left" @click="router.back()" />
         <v-icon v-else icon="mdi-chef-hat" class="ml-3" />
@@ -106,13 +106,13 @@ onUnmounted(() => {
       </v-list>
     </v-navigation-drawer>
 
-    <v-main class="bg-background" :class="{ 'main-mobile': isMobile && showChrome }">
+    <v-main class="app-background" :class="{ 'main-mobile': isMobile && showChrome }">
       <v-container fluid class="pa-3 page mx-auto" :class="{ 'container-mobile': isMobile && showChrome }">
         <router-view />
       </v-container>
     </v-main>
 
-    <v-bottom-navigation v-if="showChrome && isMobile" grow color="primary" elevation="8" class="safe-area-bottom">
+    <v-bottom-navigation v-if="showChrome && isMobile" grow color="primary" elevation="0" class="safe-area-bottom bottom-nav">
       <v-btn v-for="item in mainNav" :key="item.to" :to="item.to">
         <v-icon>{{ item.icon }}</v-icon>
         <span class="text-caption mt-1">{{ item.title }}</span>
@@ -132,9 +132,13 @@ onUnmounted(() => {
 .safe-area-bg {
   position: fixed; top: 0; left: 0; right: 0;
   height: env(safe-area-inset-top);
-  background: rgb(var(--v-theme-primary));
+  background: linear-gradient(120deg, #2563EB 0%, #4F46E5 100%);
   z-index: 1000;
 }
+.app-bar-gradient { background: linear-gradient(120deg, #2563EB 0%, #4F46E5 100%) !important; }
+.app-background { background: linear-gradient(180deg, #F4F7FE 0%, #ECF1FB 100%); min-height: 100vh; }
+.bottom-nav { background: rgba(255, 255, 255, 0.92) !important; backdrop-filter: blur(12px); box-shadow: 0 -1px 0 rgba(15, 23, 42, 0.06) !important; }
+.v-card { box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 16px rgba(37, 99, 235, 0.04) !important; }
 .safe-area-top { padding-top: env(safe-area-inset-top) !important; }
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom) !important;

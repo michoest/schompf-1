@@ -83,23 +83,17 @@ export default createVuetify({
       elevation: 0,
     },
     VCard: {
-      rounded: 'lg',
-      elevation: 1,
+      rounded: 'xl',
+      elevation: 0,
     },
-    VTextField: {
-      variant: 'outlined',
-      density: 'comfortable',
-    },
-    VSelect: {
-      variant: 'outlined',
-      density: 'comfortable',
-    },
-    VAutocomplete: {
-      variant: 'outlined',
-      density: 'comfortable',
-    },
+    VTextField: { variant: 'solo-filled', flat: true, density: 'comfortable', rounded: 'lg' },
+    VTextarea: { variant: 'solo-filled', flat: true, rounded: 'lg' },
+    VSelect: { variant: 'solo-filled', flat: true, density: 'comfortable', rounded: 'lg' },
+    VAutocomplete: { variant: 'solo-filled', flat: true, density: 'comfortable', rounded: 'lg' },
+    VCombobox: { variant: 'solo-filled', flat: true, density: 'comfortable', rounded: 'lg' },
+    VExpansionPanels: { flat: true },
     VChip: {
-      rounded: 'lg',
+      rounded: 'pill',
     },
     VList: {
       rounded: 'lg',
