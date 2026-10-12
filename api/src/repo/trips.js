@@ -423,7 +423,7 @@ export function buildTripList(db, trip) {
   return { trip, items, freeItems: standalone, reminders };
 }
 
-function toFreeItem(f) {
+export function toFreeItem(f) {
   return {
     id: f.id, tripId: f.trip_id, storeId: f.store_id, productId: f.product_id, text: f.text,
     amount: f.amount, unit: f.unit, display: f.amount == null ? '' : formatAmount(f.amount, f.unit ?? 'Stück'),
