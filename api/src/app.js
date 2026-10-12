@@ -10,6 +10,7 @@ import {
   setTripItem, addFreeItem, updateFreeItem, deleteFreeItem, syncMealToTrip, previewMealSync,
 } from './repo/trips.js';
 import { createEventHub } from './events.js';
+import { addInboxItems } from './repo/inbox.js';
 import { addFeedback, listFeedback, resolveFeedback } from './repo/feedback.js';
 import { TYPES, pushConfigured, sendPush, createPlanNotifier } from './notifications.js';
 
@@ -133,6 +134,13 @@ export function createApp(db, { corsOrigins = ['http://localhost:5173'] } = {}) 
   app.post('/api/free-items', (req, res) => res.status(201).json(addFreeItem(db, { ...req.body, tripId: null }, req.person.id)));
   app.put('/api/free-items/:id', (req, res) => sendOr404(res, updateFreeItem(db, req.params.id, req.body)));
   app.delete('/api/free-items/:id', (req, res) => res.status(deleteFreeItem(db, req.params.id) ? 204 : 404).end());
+
+  // Eingang von außen (Kairos, Claude): Artikel wie in der Schnellzeile, idempotent per ref
+  app.post('/api/inbox', (req, res) => {
+    const items = addInboxItems(db, req.body.items, req.person.id);
+    if (items.some(i => i.status === 'created')) events.publish({ scope: 'free-items', by: req.person.name, deviceId: req.device.id });
+    res.json({ items });
+  });
 
   // Anmerkungen (Feedback) zu Gerichten oder allgemein
   app.get('/api/feedback', (req, res) => res.json(listFeedback(db, { status: req.query.status ?? null, dishId: req.query.dishId ?? null })));
