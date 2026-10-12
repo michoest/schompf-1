@@ -20,7 +20,11 @@ Wunsch des Nutzers (2026-10-12):
 **Stand 2026-10-12:** Spec liegt in `kairos-1/docs/schompf-schnittstelle.md`. Schompf-Seite `POST /api/inbox` ist live (`api/src/repo/inbox.js`,
 Migration 003). Entschieden: Ziel = aktueller Einkauf wie in der App, sonst Merkliste der Warengruppe, sonst We; Notiz nur bei unbekannten
 Produkten in Klammern; keine Push-Meldung. Kairos-Seite (Übergabe per Tipp, `handoff`) baut die kairos-1-Session; Kairos wird Gerät von Roßes.
-Offen: **Schompf-MCP-Server** (Empfehlung in der Spec: `add_to_shopping` nutzt `addInboxItems`).
+**MCP-Server** (`api/src/mcp.js`, `POST /mcp`, Geräte-Token): list_plan, search_dishes, get_dish, get_shopping, add_to_shopping
+(= Eingang), plan_meal (ändert die Liste nicht), list_feedback, add_feedback. Auf Dev deployt; dort fehlt im Caddyfile noch
+`handle /mcp` (Prod-Domain leitet alles an die API). Anbindung in Claude Code: eigenes Gerät „Claude“ (Code per `pi.sh prod code Roßes`),
+`claude mcp add --transport http schompf https://schompf-api.michoest.com/mcp --header "Authorization: Bearer <token>"`.
+claude.ai/Desktop-Connectoren bräuchten OAuth – bisher nicht gebaut.
 
 ### Wichtig zu Kairos
 - Maßgeblich ist **kairos-1** (`~/dev/kairos-1`, GitHub michoest/kairos-1, privat, läuft auf pi5 unter kairos.michoest.com, PM2 `kairos-1-api` :3012).
