@@ -122,3 +122,12 @@ test('Produkt in Benutzung kann nicht gelöscht werden', async () => {
   const res = await call('DELETE', `/api/products/${ghetti.id}`);
   assert.equal(res.status, 400);
 });
+
+test('Eingang: Artikel von außen, ohne Token 401', async () => {
+  assert.equal((await call('POST', '/api/inbox', { items: [{ ref: 'kairos:x', text: 'Milch' }] }, null)).status, 401);
+  assert.equal((await call('POST', '/api/inbox', { items: [] })).status, 400);
+  const res = await call('POST', '/api/inbox', { items: [{ ref: 'kairos:x', text: '2 l Milch' }, { ref: 'kairos:y', text: '' }] });
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body.items.map(i => i.status), ['created', 'error']);
+  assert.equal((await call('POST', '/api/inbox', { items: [{ ref: 'kairos:x', text: '2 l Milch' }] })).body.items[0].status, 'exists');
+});
