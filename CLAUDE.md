@@ -19,9 +19,20 @@ Anmerkungen der Nutzer: `scripts/pi.sh prod feedback` lesen, umsetzen, `scripts/
 
 ## Entwicklung
 
-- `npm run install:all` einmalig, `npm run db:pull` holt die Live-DB nach `api/data/db.json`.
-- `npm run dev` startet API (:3000) und App (:5173). Im Dev-Modus ist `VITE_API_URL` leer, die App ruft relativ `/api` auf und der Vite-Proxy leitet an `VITE_API_PROXY` weiter.
+- `npm run install:all` einmalig. Lokale DB: `npm run db:pull` (Kopie der Live-SQLite) oder im Ordner `api`: `npm run migrate -- --force` (frisch aus `api/data/db.json` + `api/data/migration/`).
+  Danach Login lokal: `cd api && npm run data -- person Roßes` (falls nötig) und `npm run data -- code Roßes`.
+- `npm run dev` startet API (:3000) und App (:5173). Im Dev-Modus ist `VITE_API_URL` leer, die App ruft relativ `/api` auf und der Vite-Proxy leitet an `VITE_API_PROXY` weiter. Nach Ersetzen der DB-Datei die API neu starten.
+- Tests: `cd api && npm test` (node:test, In-Memory-SQLite). UI-Prüfung ad hoc mit Playwright (siehe `docs/naechste-schritte.md`).
 - Produktions-Build nutzt `app/.env.production` (`VITE_API_URL=https://schompf-api.michoest.com`).
+- Datenwerkzeug (Gerichte als Datei exportieren/importieren, Übersicht, Anmerkungen, Codes): `api/scripts/schompf.js`, auf dem Pi per `scripts/pi.sh dev|prod <Befehl>`.
+
+## Arbeitsweise mit dem Nutzer
+
+- Deutsch, interaktiv, fachliche Logik zuerst; keine großen Dokumente, sondern Thema für Thema abstimmen.
+- App-Verhalten muss vorhersehbar sein: nichts „im Hintergrund“ ändern (z.B. Einkaufsliste nur ausdrücklich anpassen).
+- Vor Änderungen an der Produktion (Deploy, Daten) kurz fragen; Dev frei nutzen, aber Dev-DB nicht leichtfertig mit `--refresh-db` neu aufsetzen.
+- Neue Gerichte/Rezepte: als Markdown in den Downloads abgelegt (chefkoch.de ist für Claude nicht abrufbar). Mengen pro Portion, Namen auf Schatzisch.
+- Offene Aufgaben und Übergabe: `docs/naechste-schritte.md`.
 
 ## Datenbank-Schema
 
