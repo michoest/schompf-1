@@ -11,6 +11,7 @@ import {
 } from './repo/trips.js';
 import { createEventHub } from './events.js';
 import { addInboxItems } from './repo/inbox.js';
+import { mcpHandler } from './mcp.js';
 import { addFeedback, listFeedback, resolveFeedback } from './repo/feedback.js';
 import { TYPES, pushConfigured, sendPush, createPlanNotifier } from './notifications.js';
 
@@ -31,7 +32,7 @@ export function createApp(db, { corsOrigins = ['http://localhost:5173'] } = {}) 
     res.status(201).json({ token, person, device });
   });
 
-  app.use('/api', (req, res, next) => {
+  const requireDevice = (req, res, next) => {
     const header = req.get('authorization') ?? '';
     // EventSource kann keine Header setzen → für /api/events Token als Query-Parameter
     const token = header.startsWith('Bearer ') ? header.slice(7) : (req.path === '/events' ? req.query.token : null);
@@ -40,7 +41,12 @@ export function createApp(db, { corsOrigins = ['http://localhost:5173'] } = {}) 
     req.person = auth.person;
     req.device = auth.device;
     next();
-  });
+  };
+  app.use('/api', requireDevice);
+
+  // MCP für Claude (Streamable HTTP, zustandslos), gleicher Geräte-Token
+  app.post('/mcp', requireDevice, mcpHandler({ db, events, planNotifier }));
+  app.all('/mcp', (req, res) => res.status(405).json({ error: 'Nur POST' }));
 
   // Jede erfolgreiche Änderung an alle Geräte melden
   app.use('/api', (req, res, next) => {
