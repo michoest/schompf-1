@@ -17,7 +17,10 @@ Wunsch des Nutzers (2026-10-12):
 2. **Kairos → Schompf**: Landet in der Todo-App Kairos ein Eintrag in der Kategorie „Einkaufen“, soll er direkt nach Schompf –
    so, als hätte man unten im Tab Einkaufen etwas eingetippt. Kairos soll nichts über Schompf-Logik wissen, nur ein Item (oder eine Liste) schicken.
 
-**Der Nutzer wollte dazu noch eine kurze Spec schicken – zuerst danach fragen.**
+**Stand 2026-10-12:** Spec liegt in `kairos-1/docs/schompf-schnittstelle.md`. Schompf-Seite `POST /api/inbox` ist live (`api/src/repo/inbox.js`,
+Migration 003). Entschieden: Ziel = aktueller Einkauf wie in der App, sonst Merkliste der Warengruppe, sonst We; Notiz nur bei unbekannten
+Produkten in Klammern; keine Push-Meldung. Kairos-Seite (Übergabe per Tipp, `handoff`) baut die kairos-1-Session; Kairos wird Gerät von Roßes.
+Offen: **Schompf-MCP-Server** (Empfehlung in der Spec: `add_to_shopping` nutzt `addInboxItems`).
 
 ### Wichtig zu Kairos
 - Maßgeblich ist **kairos-1** (`~/dev/kairos-1`, GitHub michoest/kairos-1, privat, läuft auf pi5 unter kairos.michoest.com, PM2 `kairos-1-api` :3012).
