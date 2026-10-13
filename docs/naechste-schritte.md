@@ -57,6 +57,7 @@ Bekannte inhaltliche Punkte:
 ## Kleinere technische Punkte
 
 - „neu“-Markierung in der Einkaufsliste erst ab 5 s nach Erstellen des Einkaufs (Toleranz in `buildTripList`).
-- SSE-Token steht als Query-Parameter in Caddy-Warnlogs (bei abgebrochenen Verbindungen) – ggf. auf kurzlebiges Event-Token umstellen.
-- Prod-API lauscht auf `0.0.0.0:3000` (`HOST` in `api/.env`); `127.0.0.1` würde reichen (Caddy ist lokal).
+- Live-Sync liest `/api/events` seit 2026-10-13 per fetch mit Authorization-Header. Der Query-Parameter `?token=` wird nur noch für alte, gecachte
+  App-Versionen angenommen – in einigen Wochen in `api/src/app.js` (`requireDevice`) entfernen.
+- Prod-API lauscht seit 2026-10-13 nur auf `127.0.0.1:3000` (Standard in `server.js`, `HOST` in `api/.env`); `pi5.local:3000` ist nicht mehr erreichbar.
 - UI-Tests laufen bisher ad hoc mit Playwright (Chrome aus `/Applications`, `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`) gegen `npm run dev`; lokale DB siehe CLAUDE.md → Entwicklung.
