@@ -4,7 +4,8 @@ import { createApp } from './app.js';
 import { startScheduler, pushConfigured } from './notifications.js';
 
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || '0.0.0.0';
+// Nur lokal lauschen: Caddy (auf demselben Rechner) ist der einzige Weg von außen
+const HOST = process.env.HOST || '127.0.0.1';
 const corsOrigins = process.env.CORS_ORIGINS?.split(',') || ['http://localhost:5173'];
 
 const db = openDatabase(databasePath());

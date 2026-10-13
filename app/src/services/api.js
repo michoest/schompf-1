@@ -96,11 +96,66 @@ export default {
   pushSettings: settings => put('/api/push/settings', settings),
   pushTest: () => post('/api/push/test'),
 
-  /** Live-Sync: ruft onChange({ scope, by, deviceId }) bei jeder Änderung auf einem Gerät auf. */
+  /**
+   * Live-Sync: ruft onChange({ scope, by, deviceId }) bei jeder Änderung auf einem Gerät auf.
+   * Server-Sent Events per fetch statt EventSource, damit das Token im Header steht und nicht in der URL
+   * (sonst landet es in Proxy-Logs). Verbindet sich nach Abbruch selbst neu, wie EventSource.
+   */
   subscribe(onChange) {
     if (!token) return () => {}
-    const source = new EventSource(`${API_URL}/api/events?token=${encodeURIComponent(token)}`)
-    source.addEventListener('change', e => onChange(JSON.parse(e.data)))
-    return () => source.close()
+    let controller = null
+    let retryTimer = null
+    let stopped = false
+    let delay = 1000
+
+    async function connect() {
+      controller = new AbortController()
+      try {
+        const response = await fetch(`${API_URL}/api/events`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: 'text/event-stream' },
+          signal: controller.signal,
+          cache: 'no-store',
+        })
+        if (response.status === 401) { onUnauthorized(); return }
+        if (!response.ok || !response.body) throw new Error(`Status ${response.status}`)
+        delay = 1000
+        const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+        let buffer = ''
+        for (;;) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buffer += value.replace(/\r\n/g, '\n')
+          let end
+          while ((end = buffer.indexOf('\n\n')) >= 0) {
+            dispatch(buffer.slice(0, end))
+            buffer = buffer.slice(end + 2)
+          }
+        }
+      } catch (e) {
+        if (stopped) return
+      }
+      if (stopped) return
+      retryTimer = setTimeout(connect, delay)
+      delay = Math.min(delay * 2, 30000)
+    }
+
+    function dispatch(block) {
+      let event = 'message'
+      const data = []
+      for (const line of block.split('\n')) {
+        if (line.startsWith('event:')) event = line.slice(6).trim()
+        else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''))
+      }
+      if (event === 'change' && data.length) {
+        try { onChange(JSON.parse(data.join('\n'))) } catch { /* kaputtes Ereignis überspringen */ }
+      }
+    }
+
+    connect()
+    return () => {
+      stopped = true
+      clearTimeout(retryTimer)
+      controller?.abort()
+    }
   },
 }
