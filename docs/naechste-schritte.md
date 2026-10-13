@@ -48,11 +48,10 @@ claude.ai/Desktop-Connectoren bräuchten OAuth – bisher nicht gebaut.
 Der Nutzer schreibt Anmerkungen in der App (Gericht → Sprechblase, oder Zahnrad → Feedback geben).
 Auslesen: `scripts/pi.sh prod feedback` · umsetzen (Gerichte via `scripts/pi.sh prod gericht <Name>` / `import - --probe`) · erledigen: `scripts/pi.sh prod erledigt <ID> <was geändert wurde>`.
 
-Bekannte inhaltliche Punkte:
-- Mengen pro Portion stimmen nicht überall (z.B. Clette: ganze Gläser pro Portion; Bissotto: 0,5 Schalotten pro Portion).
-- Schatzisch vereinheitlichen (neue Produkte heißen teils noch hochdeutsch: Birne, Linsen, Thunfisch, Tortillas …; „Saures Sahne“ ist zusammengeführt).
-- Nanenrot: Platzhalter `{Nane, 0,5}` – ganze Menge gemeint? Zeit 5 Min. vs. verlinktes Bananenbrot (70 Min.) – nachfragen.
-- Vorbereitungen (Erinnerung am Vortag) sind bisher nur bei der Ghurtbombe hinterlegt.
+Stand 2026-10-13: Alle aktiven Kochgerichte haben ein Rezept (#5 geschlossen); nur die Entwürfe sind noch ohne.
+Erledigt: Clette-Mengen (Gläser/Guette 0,5 pro Portion), Tortillas → Tillas, Fenchel → Nchel (Gericht + Nchelnolle),
+Birne/Linsen/Thunfisch bleiben bewusst hochdeutsch, Nanenrot ist jetzt Kuchen (12 Stück), Vorbereitungen bei Chersli (12 h) und
+Linsen und Pätzle (24 h). Sagne wird immer am Tag selbst gemacht (keine Vorbereitung).
 
 ## Kleinere technische Punkte
 
