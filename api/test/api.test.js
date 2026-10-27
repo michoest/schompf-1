@@ -81,6 +81,8 @@ test('Mahlzeiten: Gericht, Reste, Freitext', async () => {
 });
 
 test('Einkauf anlegen, abhaken; andere Geräte bekommen die Änderung live', async () => {
+  const dish = (await call('GET', '/api/dishes')).body[0];
+  await call('POST', '/api/meals', { date: '2026-10-15', slotId: 'dinner', kind: 'dish', dishId: dish.id });
   const events = [];
   const controller = new AbortController();
   const stream = await fetch(`${base}/api/events?token=${token}`, { signal: controller.signal });
@@ -114,6 +116,23 @@ test('Einkauf anlegen, abhaken; andere Geräte bekommen die Änderung live', asy
   controller.abort();
   await reading;
   assert.deepEqual(events.map(e => [e.scope, e.by]), [['trips', 'Andrea'], ['trips', 'Andrea']]);
+});
+
+test('Durchgehende Liste: Plan übernehmen, Einkauf fertig, Zubereitet nimmt offene Zutaten von der Liste', async () => {
+  const dish = (await call('GET', '/api/dishes')).body[0];
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(new Date());
+  const meal = (await call('POST', '/api/meals', { date: today, slotId: 'dinner', kind: 'dish', dishId: dish.id })).body;
+  const suggestion = (await call('GET', '/api/trips/suggestion')).body;
+  assert.ok(suggestion.planTo >= today);
+  const list = (await call('POST', '/api/trips/current/plan', { to: today })).body;
+  assert.ok(list.items.some(i => i.sources.some(s => s.mealId === meal.id)), 'Mahlzeit von heute ist drauf');
+  const needs = (await call('GET', `/api/meals/${meal.id}/open-needs`)).body;
+  assert.ok(needs.length > 0);
+  await call('PUT', `/api/meals/${meal.id}`, { status: 'prepared', releaseNeeds: true });
+  assert.deepEqual((await call('GET', `/api/meals/${meal.id}/open-needs`)).body, []);
+  const after = (await call('POST', '/api/trips/current/finish')).body;
+  assert.notEqual(after.trip.id, list.trip.id);
+  assert.equal((await call('GET', '/api/trips/current')).body.trip.id, after.trip.id);
 });
 
 test('Produkt in Benutzung kann nicht gelöscht werden', async () => {

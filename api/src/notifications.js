@@ -93,7 +93,9 @@ function dueLaterPurchases(db, now) {
   const trip = getCurrentTrip(db);
   if (!trip) return [];
   const today = localDate(now);
-  const items = buildTripList(db, trip).items.filter(i => i.part === 'later' && i.state === 'open' && i.buyFrom && i.buyFrom <= today);
+  // kurz haltbare Zutaten, deren Kauftag heute ist (sie stehen ab heute in der normalen Liste)
+  const items = buildTripList(db, trip, today).items
+    .filter(i => i.part === 'now' && i.state === 'open' && i.sources.some(s => s.type === 'meal' && s.buyFrom === today));
   if (!items.length) return [];
   const describe = i => {
     const meal = i.sources.find(s => s.type === 'meal');
@@ -191,5 +193,8 @@ export function createPlanNotifier(db, { quietMs = 10 * 60_000 } = {}) {
   function tripCreated(person, trip) {
     sendPush(db, { type: 'plan', key: `trip:${trip.id}`, title: `${person.name} hat einen Einkauf erstellt`, body: `für ${dayLabel(trip.coversFrom)}–${dayLabel(trip.coversTo)}`, url: '/einkauf' }, { exceptPersonId: person.id });
   }
-  return { mealPlanned, tripCreated };
+  function planTakenOver(person, trip) {
+    sendPush(db, { type: 'plan', key: `plan-taken:${trip.id}:${trip.planTakenAt}`, title: `${person.name} hat den Plan auf die Einkaufsliste übernommen`, body: `bis ${dayLabel(trip.coversTo)}`, url: '/einkauf' }, { exceptPersonId: person.id });
+  }
+  return { mealPlanned, tripCreated, planTakenOver };
 }

@@ -6,8 +6,9 @@ import { listMeals, getMeal, saveMeal, deleteMeal } from './repo/meals.js';
 import { getStructure } from './repo/structure.js';
 import { authenticate, pairDevice } from './repo/auth.js';
 import {
-  suggestTrip, getTrip, getCurrentTrip, listTrips, createTrip, updateTrip, buildTripList,
+  suggestTrip, suggestPlanTo, getTrip, ensureCurrentTrip, listTrips, createTrip, updateTrip, buildTripList,
   setTripItem, addFreeItem, updateFreeItem, deleteFreeItem, syncMealToTrip, previewMealSync,
+  finishTrip, takeOverPlan, openNeedsOfMeal, releaseMealNeeds,
 } from './repo/trips.js';
 import { createEventHub } from './events.js';
 import { addInboxItems } from './repo/inbox.js';
@@ -89,6 +90,8 @@ export function createApp(db, { corsOrigins = ['http://localhost:5173'] } = {}) 
   // Mahlzeiten
   app.get('/api/meals', (req, res) => res.json(listMeals(db, { from: req.query.from, to: req.query.to })));
   app.get('/api/meals/:id', (req, res) => sendOr404(res, getMeal(db, req.params.id)));
+  // Offene Zutaten dieser Mahlzeit auf der Einkaufsliste (Nachfrage bei „Zubereitet“ und beim Löschen)
+  app.get('/api/meals/:id/open-needs', (req, res) => res.json(openNeedsOfMeal(db, req.params.id)));
   // syncTrip: Einkaufsliste ausdrücklich mitändern (sonst bleibt sie, wie sie ist)
   app.post('/api/meals/preview', (req, res) => {
     const { id = null, remove = false, ...input } = req.body;
@@ -102,22 +105,28 @@ export function createApp(db, { corsOrigins = ['http://localhost:5173'] } = {}) 
     res.status(201).json(meal);
   });
   app.put('/api/meals/:id', (req, res) => {
-    const { syncTrip, ...input } = req.body;
+    const { syncTrip, releaseNeeds, ...input } = req.body;
     const meal = saveMeal(db, input, { id: req.params.id, personId: req.person.id });
     if (meal && syncTrip) syncMealToTrip(db, meal.id);
+    if (meal && releaseNeeds) releaseMealNeeds(db, meal.id);
     sendOr404(res, meal && getMeal(db, meal.id));
   });
   app.delete('/api/meals/:id', (req, res) => {
-    if (req.query.syncTrip === '1') syncMealToTrip(db, req.params.id, { remove: true });
+    // Nur offene Zutaten von der Liste nehmen; Gekauftes bleibt stehen
+    if (req.query.syncTrip === '1') releaseMealNeeds(db, req.params.id);
     res.status(deleteMeal(db, req.params.id) ? 204 : 404).end();
   });
 
   // Einkäufe
-  app.get('/api/trips/suggestion', (req, res) => res.json(suggestTrip(db)));
+  app.get('/api/trips/suggestion', (req, res) => res.json({ ...suggestTrip(db), planTo: suggestPlanTo(db) }));
   app.get('/api/trips', (req, res) => res.json(listTrips(db)));
-  app.get('/api/trips/current', (req, res) => {
-    const trip = getCurrentTrip(db);
-    res.json(trip ? buildTripList(db, trip) : null);
+  // Durchgehende Liste: es gibt immer einen aktuellen Einkauf
+  app.get('/api/trips/current', (req, res) => res.json(buildTripList(db, ensureCurrentTrip(db, req.person.id))));
+  app.post('/api/trips/current/finish', (req, res) => res.json(buildTripList(db, finishTrip(db, req.person.id))));
+  app.post('/api/trips/current/plan', (req, res) => {
+    const trip = takeOverPlan(db, { to: req.body.to }, req.person.id);
+    planNotifier.planTakenOver(req.person, trip);
+    res.json(buildTripList(db, trip));
   });
   app.get('/api/trips/:id', (req, res) => {
     const trip = getTrip(db, req.params.id);

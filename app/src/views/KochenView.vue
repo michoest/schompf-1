@@ -41,9 +41,21 @@ function open(m) {
   router.push({ path: `/gericht/${m.dishId}`, query })
 }
 
+// Zubereitet: stehen noch offene Zutaten auf der Einkaufsliste, nachfragen, ob sie weg sollen
+const pending = ref(null)   // { meal, needs }
 async function togglePrepared(m) {
   try {
-    await api.updateMeal(m.id, { status: m.status === 'prepared' ? 'planned' : 'prepared' })
+    if (m.status !== 'prepared') {
+      const needs = await api.mealOpenNeeds(m.id)
+      if (needs.length) { pending.value = { meal: m, needs }; return }
+    }
+    await setPrepared(m, m.status !== 'prepared', false)
+  } catch (e) { appStore.showError(e) }
+}
+async function setPrepared(m, prepared, releaseNeeds) {
+  pending.value = null
+  try {
+    await api.updateMeal(m.id, { status: prepared ? 'prepared' : 'planned', releaseNeeds })
     await load()
   } catch (e) { appStore.showError(e) }
 }
@@ -77,6 +89,21 @@ async function togglePrepared(m) {
         Noch nichts geplant. <a href="#" @click.prevent="router.push('/plan')">Zum Plan</a>
       </p>
     </div>
+
+    <v-dialog :model-value="!!pending" max-width="400" @update:model-value="pending = null">
+      <v-card v-if="pending" :title="`${label(pending.meal)} zubereitet`">
+        <v-card-text class="text-body-2">
+          Noch auf der Einkaufsliste:
+          <div v-for="n in pending.needs" :key="n.productId + n.part" class="mt-1">{{ n.display }} {{ n.name }}</div>
+          <p class="mt-3">Von der Liste nehmen?</p>
+        </v-card-text>
+        <v-card-actions>
+          <v-btn variant="text" @click="setPrepared(pending.meal, true, false)">Stehen lassen</v-btn>
+          <v-spacer />
+          <v-btn color="primary" variant="flat" @click="setPrepared(pending.meal, true, true)">Entfernen</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 

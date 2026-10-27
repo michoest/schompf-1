@@ -4,7 +4,10 @@ import { openDatabase, newId, now } from '../src/db/index.js';
 import { suggestTripRange } from '../src/domain/dates.js';
 import { saveDish } from '../src/repo/dishes.js';
 import { saveMeal, deleteMeal } from '../src/repo/meals.js';
-import { createTrip, buildTripList, setTripItem, addFreeItem, collectNeeds, suggestTrip, syncMealToTrip, previewMealSync, updateTrip } from '../src/repo/trips.js';
+import {
+  createTrip, buildTripList, setTripItem, addFreeItem, collectNeeds, suggestTrip, syncMealToTrip, previewMealSync, updateTrip,
+  finishTrip, takeOverPlan, ensureCurrentTrip, getCurrentTrip, openNeedsOfMeal, releaseMealNeeds,
+} from '../src/repo/trips.js';
 
 let db, ids;
 
@@ -170,6 +173,7 @@ test('Gelöschte Mahlzeit mit Anpassen: Zutaten verschwinden; neuer Einkauf nimm
 
   const bought = meal('2026-10-15', ids.lat);
   syncMealToTrip(db, bought.id);
+  setTripItem(db, first.id, ids.maten, 'now', { state: 'in_cart' });
   saveMeal(db, { date: '2026-10-18' }, { id: bought.id });   // verschoben in den nächsten Zeitraum
   meal('2026-10-19', ids.nese);
   const second = trip('2026-10-17', '2026-10-20');
@@ -226,12 +230,87 @@ test('Laden: Warengruppe, Ausweichladen, feste Ausnahme', () => {
 test('Haltbarkeit: späterer Anteil wird getrennt und mit Datum ausgewiesen', () => {
   meal('2026-10-14', ids.nese);             // Hackleisch für Mi: jetzt kaufen
   meal('2026-10-16', ids.nese);             // Hackleisch für Fr: Haltbarkeit 1 Tag → ab Do
-  const list = buildTripList(db, trip());
+  const t = trip();
+  const list = buildTripList(db, t, '2026-10-14');
   assert.equal(line(list, 'Hackleisch').display, '200 g');
   const later = line(list, 'Hackleisch', 'later');
   assert.equal(later.display, '200 g');
   assert.equal(later.buyFrom, '2026-10-15');
   assert.equal(line(list, 'Ghetti').display, '500 g', 'ohne Haltbarkeit alles jetzt');
+  // am Kauftag steht es von selbst in der normalen Liste
+  const thursday = buildTripList(db, t, '2026-10-15');
+  assert.equal(line(thursday, 'Hackleisch', 'later'), undefined);
+  assert.equal(line(thursday, 'Hackleisch').display, '400 g');
+});
+
+test('Einkauf fertig: Erledigtes verschwindet, Offenes bleibt samt Mengenänderung auf der Liste', () => {
+  meal('2026-10-14', ids.nese);
+  const t = trip();
+  setTripItem(db, t.id, ids.ghetti, 'now', { state: 'in_cart' });
+  setTripItem(db, t.id, ids.hack, 'now', { amount: 300, unit: 'g' });
+  setTripItem(db, t.id, ids.blauch, 'now', { state: 'have' });
+  addFreeItem(db, { tripId: t.id, text: 'Regano' });
+  const gekauft = addFreeItem(db, { tripId: t.id, text: 'Brezeln' });
+  db.prepare("UPDATE free_items SET state = 'in_cart' WHERE id = ?").run(gekauft.id);
+
+  const next = finishTrip(db);
+  assert.equal(getTripFresh(t.id).phase, 'done');
+  assert.equal(getCurrentTrip(db).id, next.id);
+  const list = buildTripList(db, next, '2026-10-14');
+  assert.equal(line(list, 'Ghetti'), undefined, 'im Wagen → erledigt');
+  assert.equal(line(list, 'Blauch'), undefined, 'vorrätig → erledigt');
+  assert.equal(line(list, 'Hackleisch').display, '300 g', 'offen, Mengenänderung bleibt');
+  assert.deepEqual(list.freeItems.map(f => f.text), ['Regano']);
+  assert.equal(line(finishTrip(db) && buildTripList(db, getCurrentTrip(db), '2026-10-14'), 'Hackleisch').display, '300 g', 'auch über mehrere Runden');
+});
+
+test('Es gibt immer eine Liste; Plan übernehmen nimmt nur Offenes ab dem Tag, ohne Zubereitetes', () => {
+  assert.ok(!getCurrentTrip(db));
+  const empty = ensureCurrentTrip(db);
+  assert.equal(buildTripList(db, empty).items.length, 0, 'leere Liste, nichts im Hintergrund übernommen');
+  meal('2026-10-13', ids.lat);                       // vor dem Tag: bleibt draußen
+  const done = meal('2026-10-14', ids.nese);
+  saveMeal(db, { status: 'prepared' }, { id: done.id });
+  meal('2026-10-15', ids.nese);
+  meal('2026-10-20', ids.lat);                       // nach „bis“
+  const t = takeOverPlan(db, { from: '2026-10-14', to: '2026-10-16' });
+  assert.equal(t.id, empty.id);
+  assert.equal(t.coversTo, '2026-10-16');
+  const list = buildTripList(db, t, '2026-10-14');
+  assert.equal(line(list, 'Ghetti').display, '250 g');
+  assert.equal(line(list, 'Maten'), undefined);
+  assert.equal(line(list, 'Ghetti').isNew, false, 'Übernommenes ist nicht „neu“');
+});
+
+test('Neuer Bedarf auf einer schon erledigten Zeile steht wieder offen da', () => {
+  meal('2026-10-14', ids.nese);
+  const t = trip();
+  setTripItem(db, t.id, ids.ghetti, 'now', { state: 'in_cart' });
+  setTripItem(db, t.id, ids.hack, 'now', { state: 'in_cart' });
+  const later = meal('2026-10-15', ids.lat);
+  syncMealToTrip(db, later.id);
+  let list = buildTripList(db, t, '2026-10-14');
+  assert.equal(line(list, 'Ghetti').state, 'in_cart', 'anderes Produkt: bleibt im Wagen');
+  addFreeItem(db, { tripId: t.id, text: '100 g Ghetti' });
+  list = buildTripList(db, t, '2026-10-14');
+  assert.equal(line(list, 'Ghetti').state, 'open');
+  assert.equal(line(list, 'Ghetti').display, '100 g', 'nur der neue Bedarf');
+  // eigene Mahlzeit neu einfrieren (z.B. Portionen geändert) öffnet nichts wieder
+  syncMealToTrip(db, db.prepare('SELECT id FROM meals WHERE date = ?').pluck().get('2026-10-14'));
+  assert.equal(line(buildTripList(db, t, '2026-10-14'), 'Hackleisch').state, 'in_cart');
+});
+
+test('Zubereitet/gelöscht: nur offene Zutaten, nur der eigene Anteil verschwindet', () => {
+  const a = meal('2026-10-14', ids.nese);
+  meal('2026-10-15', ids.nese);
+  const t = trip();
+  setTripItem(db, t.id, ids.ghetti, 'now', { state: 'in_cart' });
+  const needs = openNeedsOfMeal(db, a.id);
+  assert.deepEqual(needs.map(n => [n.name, n.display]).sort(), [['Blauch', '1 Zehe'], ['Hackleisch', '200 g']]);
+  releaseMealNeeds(db, a.id);
+  const list = buildTripList(db, t, '2026-10-14');
+  assert.equal(line(list, 'Ghetti').display, '500 g', 'schon im Wagen: bleibt');
+  assert.equal(line(list, 'Hackleisch').display, '200 g', 'nur der Anteil des anderen Essens');
 });
 
 test('Freie Artikel: exakter Produktname zählt beim Produkt mit, sonst eigene Zeile – nie per Wortanfang', () => {

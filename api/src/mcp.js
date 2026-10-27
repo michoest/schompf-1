@@ -4,7 +4,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import { listMeals, saveMeal } from './repo/meals.js';
 import { getDish, listDishes, ValidationError } from './repo/dishes.js';
-import { getCurrentTrip, buildTripList, toFreeItem } from './repo/trips.js';
+import { ensureCurrentTrip, buildTripList, toFreeItem } from './repo/trips.js';
 import { addInboxItems } from './repo/inbox.js';
 import { addFeedback, listFeedback } from './repo/feedback.js';
 import { dishToFile } from './domain/dishFile.js';
@@ -133,11 +133,11 @@ export function buildMcpServer({ db, person, changed = () => {}, planNotifier = 
   }));
 
   server.registerTool('get_shopping', {
-    description: 'Aktueller Einkauf (Liste nach Laden und Abschnitt, mit Status) und die Merklisten der Läden.',
+    description: 'Die Einkaufsliste (durchgehend: Einträge bleiben, bis sie gekauft sind; nach Laden und Abschnitt, mit Status) und die Merklisten der Läden.',
     inputSchema: {},
   }, guarded(async () => {
     const stores = new Map(db.prepare('SELECT id, name FROM stores').all().map(s => [s.id, s.name]));
-    const trip = getCurrentTrip(db);
+    const trip = ensureCurrentTrip(db);
     let list = null, reminders;
     if (trip) {
       const built = buildTripList(db, trip);
@@ -206,10 +206,10 @@ export function buildMcpServer({ db, person, changed = () => {}, planNotifier = 
     const meal = saveMeal(db, input, { personId: person.id });
     changed('meals');
     planNotifier?.mealPlanned(person, meal.date);
-    const trip = db.prepare(`SELECT date FROM shopping_trips WHERE phase != 'done' AND covers_from <= ? AND covers_to >= ?`).get(date, date);
+    const trip = db.prepare(`SELECT covers_to FROM shopping_trips WHERE phase != 'done' AND plan_taken_at IS NOT NULL AND covers_from <= ? AND covers_to >= ?`).get(date, date);
     return json({
       planned: { date, weekday: weekday(date), ...presentMeal(meal, slots()) },
-      ...(trip && meal.kind === 'dish' ? { hint: `Der Einkauf am ${weekday(trip.date)} ${trip.date} deckt diesen Tag ab; seine Liste wurde nicht angepasst (in der App: „Liste anpassen“).` } : {}),
+      ...(trip && meal.kind === 'dish' ? { hint: `Die Einkaufsliste enthält den Plan bis ${weekday(trip.covers_to)} ${trip.covers_to}; diese Mahlzeit steht noch nicht drauf (in der App beim Bearbeiten: „Auf die Einkaufsliste“).` } : {}),
     });
   }));
 

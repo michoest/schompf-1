@@ -58,7 +58,7 @@ test('Gericht suchen, lesen, planen – Plan zeigt es, Liste bleibt unverändert
   assert.equal(planned.data.planned.title, 'Ghetti Nese');
   assert.equal(planned.data.planned.servings, 2);
   assert.equal(planned.data.planned.on_shopping_list, false);
-  assert.match(planned.data.hint, /nicht angepasst/);
+  assert.match(planned.data.hint, /steht noch nicht drauf/);
   assert.ok((await call('plan_meal', { date: day, slot: 'Brunch', text: 'x' })).isError);
 
   const plan = (await call('list_plan')).data;
@@ -68,7 +68,7 @@ test('Gericht suchen, lesen, planen – Plan zeigt es, Liste bleibt unverändert
 
 test('Einkauf: Artikel hinzufügen landet im aktuellen Einkauf', async () => {
   const added = (await call('add_to_shopping', { items: ['2 l Milch'] })).data;
-  assert.match(added[0].added_to, /^Einkauf /);
+  assert.match(added[0].added_to, /^Einkaufsliste$/);
   const shopping = (await call('get_shopping')).data;
   assert.ok(shopping.trip);
   assert.deepEqual(shopping.trip.extra.map(i => i.text), ['Milch']);

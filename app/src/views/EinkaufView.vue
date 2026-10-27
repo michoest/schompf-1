@@ -15,7 +15,7 @@ const loading = ref(true)
 const tab = ref('pantry')
 const openDone = ref(new Set())   // Abschnitte, deren gekaufte Artikel aufgeklappt sind
 const tripDialog = ref(false)
-const editTrip = ref(null)
+const finishDialog = ref(false)
 
 const sheet = ref(false)
 const selected = ref(null)
@@ -24,7 +24,7 @@ const unitInput = ref('')
 
 const quickText = ref(null)
 const quickTarget = ref('trip')  // 'trip' oder storeId (Merkliste)
-const recent = ref(new Set())    // gerade abgehakt: noch kurz sichtbar lassen
+const recent = ref(new Set())    // gerade abgehakt: noch kurz an Ort und Stelle sichtbar lassen
 
 const trip = computed(() => list.value?.trip ?? null)
 const nowItems = computed(() => list.value?.items.filter(i => i.part === 'now') ?? [])
@@ -72,7 +72,7 @@ const shopStores = computed(() => {
   }
   return [...stores.values()].sort((a, b) => a.sort - b.sort).map(store => {
     const sections = [...store.sections.values()].sort((a, b) => a.sort - b.sort)
-      .map(s => ({ ...s, items: s.items.sort((a, b) => (a.state === 'in_cart') - (b.state === 'in_cart') || byName(a, b)) }))
+      .map(s => ({ ...s, items: s.items.sort(byName) }))
       .map(s => {
         const key = `${store.id ?? 'none'}/${s.name}`
         const done = s.items.filter(i => i.state === 'in_cart' && !recent.value.has(i.key))
@@ -144,7 +144,7 @@ function tapPantry(item) {
 function tapShop(item) {
   if (item.state !== 'in_cart') {
     recent.value = new Set(recent.value).add(item.key)
-    setTimeout(() => { const next = new Set(recent.value); next.delete(item.key); recent.value = next }, 900)
+    setTimeout(() => { const next = new Set(recent.value); next.delete(item.key); recent.value = next }, 500)
   }
   if (item.isFree) return setFree(item, item.state === 'in_cart' ? 'open' : 'in_cart')
   setItem(item, { state: item.state === 'in_cart' ? 'open' : 'in_cart' })
@@ -197,24 +197,32 @@ async function quickAdd() {
   } catch (e) { appStore.showError(e) }
 }
 const quickTargets = computed(() => [
-  { title: 'Dieser Einkauf', subtitle: 'kommt auf die aktuelle Liste', value: 'trip' },
+  { title: 'Einkaufsliste', subtitle: 'bleibt drauf, bis es gekauft ist', value: 'trip' },
   ...data.stores.map(s => ({ title: `Merkliste ${s.name}`, subtitle: 'bleibt stehen, bis es erledigt ist', value: s.id })),
 ])
 const quickTargetLabel = computed(() => quickTarget.value === 'trip'
-  ? 'Dieser Einkauf'
+  ? 'Einkaufsliste'
   : `Merkliste ${data.stores.find(s => s.id === quickTarget.value)?.name ?? ''}`)
 
+// „Einkauf fertig“: was im Wagen ist, verschwindet; Offenes bleibt auf der Liste
+const inCartCount = computed(() => (list.value?.items.filter(i => i.state === 'in_cart').length ?? 0)
+  + (list.value?.freeItems.filter(f => f.state === 'in_cart').length ?? 0))
+const remainingCount = computed(() => (list.value?.items.filter(i => i.state === 'open').length ?? 0)
+  + (list.value?.freeItems.filter(f => f.state === 'open').length ?? 0))
 async function finishTrip() {
+  finishDialog.value = false
   try {
-    await api.updateTrip(trip.value.id, { phase: 'done' })
-    appStore.showSnackbar('Einkauf abgeschlossen')
-    await load()
+    list.value = await api.finishTrip()
+    tab.value = 'pantry'
+    openDone.value = new Set()
+    appStore.showSnackbar('Einkauf fertig')
   } catch (e) { appStore.showError(e) }
 }
 
 function onTripSaved(result) {
   list.value = result
   tab.value = 'pantry'
+  appStore.showSnackbar('Plan übernommen')
 }
 
 const sourceLabel = s => s.type === 'manual'
@@ -225,25 +233,20 @@ const sourceLabel = s => s.type === 'manual'
 <template>
   <div v-if="loading" class="text-center pa-8"><v-progress-circular indeterminate color="primary" /></div>
 
-  <div v-else-if="!trip" class="text-center pa-8">
-    <v-icon icon="mdi-cart-outline" size="64" color="primary" class="mb-4" />
-    <p class="text-body-1 mb-4">Gerade gibt es keinen offenen Einkauf.</p>
-    <v-btn color="primary" @click="editTrip = null; tripDialog = true">Einkauf erstellen</v-btn>
-    <TripDialog v-model="tripDialog" @saved="onTripSaved" />
-  </div>
-
-  <div v-else class="einkauf">
+  <div v-else-if="trip" class="einkauf">
     <div class="d-flex align-center mb-2">
       <div class="flex-grow-1">
-        <div class="text-subtitle-1 font-weight-medium">Einkauf {{ shortDate(trip.date) }}</div>
-        <div class="text-caption text-medium-emphasis">für {{ shortDate(trip.coversFrom) }} – {{ shortDate(trip.coversTo) }}<span v-if="trip.createdBy"> · erstellt von {{ trip.createdBy }}</span></div>
+        <div class="text-subtitle-1 font-weight-medium">Einkaufsliste</div>
+        <div class="text-caption text-medium-emphasis">
+          <template v-if="trip.planTakenAt">Plan bis {{ shortDate(trip.coversTo) }} übernommen</template>
+          <template v-else>Plan noch nicht übernommen</template>
+        </div>
       </div>
+      <v-btn variant="tonal" size="small" prepend-icon="mdi-calendar-arrow-right" class="mr-1" @click="tripDialog = true">Plan übernehmen</v-btn>
       <v-menu>
-        <template #activator="{ props }"><v-btn icon="mdi-pencil-outline" variant="text" v-bind="props" aria-label="Einkauf bearbeiten" /></template>
+        <template #activator="{ props }"><v-btn icon="mdi-dots-vertical" variant="text" v-bind="props" aria-label="Mehr" /></template>
         <v-list density="compact">
-          <v-list-item prepend-icon="mdi-calendar-edit" title="Zeitraum ändern" @click="editTrip = trip; tripDialog = true" />
-          <v-list-item prepend-icon="mdi-cart-plus" title="Neuer Einkauf" @click="editTrip = null; tripDialog = true" />
-          <v-list-item prepend-icon="mdi-check-all" title="Einkauf abschließen" @click="finishTrip" />
+          <v-list-item prepend-icon="mdi-check-all" title="Einkauf fertig" @click="finishDialog = true" />
         </v-list>
       </v-menu>
     </div>
@@ -293,7 +296,7 @@ const sourceLabel = s => s.type === 'manual'
         </v-expansion-panel>
       </v-expansion-panels>
 
-      <div v-if="!pantryGroups.length && !staples.length" class="text-center text-medium-emphasis pa-6">Für diesen Zeitraum ist nichts geplant, das eingekauft werden muss.</div>
+      <div v-if="!pantryGroups.length && !staples.length" class="text-center text-medium-emphasis pa-6">Aus dem Plan steht gerade nichts auf der Liste.</div>
       <v-btn v-if="pantryGroups.length" block color="primary" variant="tonal" class="mt-2" @click="tab = 'shopping'">Fertig – zum Einkaufen</v-btn>
     </template>
 
@@ -363,9 +366,11 @@ const sourceLabel = s => s.type === 'manual'
 
       <div v-if="!openCount && !laterItems.length" class="text-center pa-6">
         <v-icon icon="mdi-party-popper" size="48" color="primary" class="mb-2" />
-        <p class="mb-3">Alles erledigt!</p>
-        <v-btn color="primary" variant="tonal" @click="finishTrip">Einkauf abschließen</v-btn>
+        <p>Alles erledigt!</p>
       </div>
+      <v-btn v-if="inCartCount" block color="primary" variant="tonal" prepend-icon="mdi-check-all" class="mb-3" @click="finishDialog = true">
+        Einkauf fertig
+      </v-btn>
     </template>
 
     <v-expansion-panels v-if="skipped.length" class="mb-3" variant="accordion">
@@ -439,7 +444,23 @@ const sourceLabel = s => s.type === 'manual'
       </v-card>
     </v-bottom-sheet>
 
-    <TripDialog v-model="tripDialog" :trip="editTrip" @saved="onTripSaved" />
+    <TripDialog v-model="tripDialog" :trip="trip" @saved="onTripSaved" />
+
+    <v-dialog v-model="finishDialog" max-width="400">
+      <v-card title="Einkauf fertig?">
+        <v-card-text class="text-body-2">
+          <p v-if="inCartCount">{{ inCartCount === 1 ? '1 Artikel im Wagen wird' : `${inCartCount} Artikel im Wagen werden` }} von der Liste genommen,
+            ebenso, was als vorrätig oder „nicht nötig“ markiert ist.</p>
+          <p v-else>Es ist noch nichts im Wagen.</p>
+          <p v-if="remainingCount" class="mt-2">{{ remainingCount === 1 ? '1 offener Artikel bleibt' : `${remainingCount} offene Artikel bleiben` }} auf der Liste.</p>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="finishDialog = false">Abbrechen</v-btn>
+          <v-btn color="primary" variant="flat" @click="finishTrip">Einkauf fertig</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
