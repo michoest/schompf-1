@@ -4,6 +4,7 @@ import App from './App.vue'
 import router from './router'
 import vuetify from './plugins/vuetify'
 import { registerSW } from 'virtual:pwa-register'
+import { setRegistration } from './utils/update'
 
 // Styles
 import '@mdi/font/css/materialdesignicons.css'
@@ -23,6 +24,7 @@ const updateSW = registerSW({
   immediate: true,
   onRegisteredSW(url, registration) {
     if (!registration) return
+    setRegistration(registration)
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') registration.update().catch(() => {})
     })

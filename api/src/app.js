@@ -4,7 +4,7 @@ import { ValidationError, listDishes, getDish, saveDish, deleteDish, getDishChan
 import { listProducts, getProduct, saveProduct, deleteProduct } from './repo/products.js';
 import { listMeals, getMeal, saveMeal, deleteMeal } from './repo/meals.js';
 import { getStructure } from './repo/structure.js';
-import { authenticate, pairDevice } from './repo/auth.js';
+import { authenticate, pairDevice, listPersons, listDevices, revokeDevice, createPairingCode } from './repo/auth.js';
 import {
   suggestTrip, suggestPlanTo, getTrip, ensureCurrentTrip, listTrips, createTrip, updateTrip, buildTripList,
   setTripItem, addFreeItem, updateFreeItem, deleteFreeItem, syncMealToTrip, previewMealSync,
@@ -64,6 +64,14 @@ export function createApp(db, { corsOrigins = ['http://localhost:5173'] } = {}) 
   app.get('/api/events', (req, res) => events.subscribe(req, res, req));
 
   app.get('/api/auth/me', (req, res) => res.json({ person: req.person, device: req.device }));
+  // Geräte im Haushalt: ansehen, abmelden, neues Gerät per Einmal-Code anmelden
+  app.get('/api/persons', (req, res) => res.json(listPersons(db)));
+  app.get('/api/devices', (req, res) => res.json(listDevices(db).map(d => ({ ...d, current: d.id === req.device.id }))));
+  app.delete('/api/devices/:id', (req, res) => res.status(revokeDevice(db, req.params.id) ? 204 : 404).end());
+  app.post('/api/auth/codes', (req, res) => {
+    const { code, person, expiresAt } = createPairingCode(db, req.body.personId ?? req.person.id);
+    res.status(201).json({ code, person, expiresAt });
+  });
   app.get('/api/structure', (req, res) => res.json(getStructure(db)));
 
   // Produkte

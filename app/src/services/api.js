@@ -77,6 +77,11 @@ export default {
   previewMeal: body => post('/api/meals/preview', body),
   mealOpenNeeds: id => get(`/api/meals/${id}/open-needs`),
 
+  persons: () => get('/api/persons'),
+  devices: () => get('/api/devices'),
+  deleteDevice: id => del(`/api/devices/${id}`),
+  createPairingCode: personId => post('/api/auth/codes', { personId }),
+
   tripSuggestion: () => get('/api/trips/suggestion'),
   currentTrip: () => get('/api/trips/current'),
   takeOverPlan: to => post('/api/trips/current/plan', { to }),

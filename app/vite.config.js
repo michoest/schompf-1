@@ -2,6 +2,12 @@ import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
+import { execSync } from 'node:child_process'
+
+// Versionskennung für „Einstellungen“: Git-Commit des Builds
+const gitVersion = (() => {
+  try { return execSync('git rev-parse --short HEAD').toString().trim() } catch { return 'dev' }
+})()
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -11,7 +17,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     define: {
-      __BUILD_TIME__: JSON.stringify(new Date().toISOString())
+      __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+      __APP_VERSION__: JSON.stringify(gitVersion),
     },
     plugins: [
       vue(),

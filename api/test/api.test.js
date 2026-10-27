@@ -135,6 +135,20 @@ test('Durchgehende Liste: Plan übernehmen, Einkauf fertig, Zubereitet nimmt off
   assert.equal((await call('GET', '/api/trips/current')).body.trip.id, after.trip.id);
 });
 
+test('Geräte: Liste, Code für ein neues Gerät, anderes Gerät abmelden', async () => {
+  const persons = (await call('GET', '/api/persons')).body;
+  assert.ok(persons.some(p => p.name === 'Andrea'));
+  const { code, person } = (await call('POST', '/api/auth/codes', {})).body;
+  assert.equal(person.name, 'Andrea', 'ohne Angabe: für sich selbst');
+  const paired = await call('POST', '/api/auth/pair', { code, deviceName: 'iPad' }, null);
+  assert.equal(paired.status, 201);
+  const devices = (await call('GET', '/api/devices')).body;
+  assert.equal(devices.filter(d => d.current).length, 1);
+  const ipad = devices.find(d => d.name === 'iPad');
+  assert.equal((await call('DELETE', `/api/devices/${ipad.id}`)).status, 204);
+  assert.equal((await call('GET', '/api/auth/me', null, paired.body.token)).status, 401);
+});
+
 test('Produkt in Benutzung kann nicht gelöscht werden', async () => {
   const ghetti = (await call('GET', '/api/products')).body.find(p => p.name === 'Ghetti');
   assert.equal(ghetti.usedIn, 1);
