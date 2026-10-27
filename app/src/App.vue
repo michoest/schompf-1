@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAppStore, useSessionStore, useDataStore } from '@/stores'
 import { useLiveStore } from '@/stores/live'
 import { setUnauthorizedHandler } from '@/services/api'
-import FeedbackDialog from '@/components/FeedbackDialog.vue'
 
 const isDevInstance = import.meta.env.VITE_APP_NAME === 'Schompf Dev'
 const route = useRoute()
@@ -16,17 +15,11 @@ const live = useLiveStore()
 
 const windowWidth = ref(window.innerWidth)
 const isMobile = computed(() => windowWidth.value < 960)
-const menu = ref(false)
-const feedbackDialog = ref(false)
 
 const mainNav = [
   { title: 'Planen', icon: 'mdi-calendar-week', to: '/plan' },
   { title: 'Einkaufen', icon: 'mdi-cart-outline', to: '/einkauf' },
   { title: 'Kochen', icon: 'mdi-pot-steam-outline', to: '/kochen' },
-]
-const settingsNav = [
-  { title: 'Benachrichtigungen', icon: 'mdi-bell-outline', to: '/einstellungen/benachrichtigungen' },
-  { title: 'Anmerkungen', icon: 'mdi-message-text-outline', to: '/verwaltung/anmerkungen' },
 ]
 const adminNav = [
   { title: 'Gerichte', icon: 'mdi-book-open-variant', to: '/verwaltung/gerichte' },
@@ -47,12 +40,6 @@ async function startSession() {
   } catch (e) {
     if (e.status !== 401) appStore.showError(e, 'Server nicht erreichbar')
   }
-}
-
-function logout() {
-  live.stop()
-  session.logout()
-  router.push('/login')
 }
 
 setUnauthorizedHandler(() => {
@@ -89,21 +76,7 @@ onUnmounted(() => {
         <v-chip v-if="isDevInstance" size="x-small" variant="flat" color="orange-darken-2" class="ml-2 font-weight-bold">DEV</v-chip>
       </v-app-bar-title>
       <template #append>
-        <v-menu v-model="menu">
-          <template #activator="{ props }">
-            <v-btn icon="mdi-cog-outline" v-bind="props" aria-label="Einstellungen und Verwaltung" />
-          </template>
-          <v-list density="comfortable" min-width="240">
-            <v-list-item v-for="item in settingsNav" :key="item.to" :to="item.to" :prepend-icon="item.icon" :title="item.title" />
-            <v-list-item prepend-icon="mdi-message-plus-outline" title="Feedback geben" @click="feedbackDialog = true" />
-            <v-divider class="my-1" />
-            <v-list-subheader>Verwaltung</v-list-subheader>
-            <v-list-item v-for="item in adminNav" :key="item.to" :to="item.to" :prepend-icon="item.icon" :title="item.title" />
-            <v-divider class="my-1" />
-            <v-list-item prepend-icon="mdi-account" :title="session.person?.name ?? 'Angemeldet'" :subtitle="session.device?.name" />
-            <v-list-item prepend-icon="mdi-logout" title="Abmelden" @click="logout" />
-          </v-list>
-        </v-menu>
+        <v-btn v-if="route.name !== 'einstellungen'" icon="mdi-cog-outline" to="/einstellungen" aria-label="Einstellungen" />
       </template>
     </v-app-bar>
 
@@ -112,6 +85,8 @@ onUnmounted(() => {
         <v-list-item v-for="item in mainNav" :key="item.to" :to="item.to" :prepend-icon="item.icon" :title="item.title" color="primary" />
         <v-divider class="my-2" />
         <v-list-item v-for="item in adminNav" :key="item.to" :to="item.to" :prepend-icon="item.icon" :title="item.title" color="primary" />
+        <v-divider class="my-2" />
+        <v-list-item to="/einstellungen" prepend-icon="mdi-cog-outline" title="Einstellungen" color="primary" />
       </v-list>
     </v-navigation-drawer>
 
@@ -128,7 +103,6 @@ onUnmounted(() => {
       </v-btn>
     </v-bottom-navigation>
 
-    <FeedbackDialog v-model="feedbackDialog" />
 
     <v-snackbar v-model="appStore.snackbar.show" :color="appStore.snackbar.color" :timeout="3500" location="top">
       {{ appStore.snackbar.message }}
