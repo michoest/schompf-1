@@ -1,14 +1,9 @@
-import { addFreeItem, getCurrentTrip } from './trips.js';
+import { addFreeItem, ensureCurrentTrip } from './trips.js';
 import { ValidationError } from './dishes.js';
-import { parseIngredientLine } from '../domain/dishFile.js';
-
-const DEFAULT_STORE = 'We';
-const DAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 
 /**
  * Eingang von außen (Kairos, Claude): Artikel wie in der Schnellzeile im Einkaufs-Tab.
- * Ziel: aktueller Einkauf (wie in der App), sonst Merkliste des Ladens der Warengruppe,
- * sonst Merkliste des Standard-Ladens (Einstellung `inboxStore`, sonst „We“).
+ * Ziel: die (durchgehende) Einkaufsliste – es gibt immer eine.
  * Pro Artikel unabhängig; gleiche `ref` legt nichts doppelt an.
  * Spec: kairos-1/docs/schompf-schnittstelle.md
  */
@@ -23,7 +18,7 @@ export function addInboxItems(db, items, personId) {
       return db.transaction(() => {
         const existing = db.prepare('SELECT * FROM free_items WHERE external_ref = ?').get(ref);
         if (existing) return result(db, ref, 'exists', existing);
-        const created = addFreeItem(db, { ...target(db, String(item.text ?? '')), text: item.text }, personId);
+        const created = addFreeItem(db, { tripId: ensureCurrentTrip(db, personId).id, text: item.text }, personId);
         const note = String(item.note ?? '').trim();
         // Notiz nur bei freien Artikeln anhängen – ein erkanntes Produkt behält seinen Namen
         const text = note && !created.product_id ? `${created.text} (${note})` : created.text;
@@ -38,37 +33,9 @@ export function addInboxItems(db, items, personId) {
   });
 }
 
-function target(db, text) {
-  const trip = getCurrentTrip(db);
-  if (trip) return { tripId: trip.id };
-  // Produkt wie in addFreeItem nur per exaktem Namen, nie per Wortanfang (#3)
-  const product = text.trim() ? findProduct(db, parseIngredientLine(text).productName) : null;
-  if (product?.store_id) return { storeId: product.store_id };
-  return { storeId: defaultStoreId(db) };
-}
-
-function findProduct(db, name) {
-  return db.prepare(`SELECT p.id, COALESCE(s.store_id, g.preferred_store_id, g.fallback_store_id) AS store_id
-                     FROM products p LEFT JOIN store_sections s ON s.id = p.section_id
-                     LEFT JOIN product_groups g ON g.id = p.group_id WHERE p.name = ?`).get(name);
-}
-
-function defaultStoreId(db) {
-  const name = db.prepare("SELECT value FROM settings WHERE key = 'inboxStore'").get()?.value ?? DEFAULT_STORE;
-  const store = db.prepare('SELECT id FROM stores WHERE name = ?').get(name) ?? db.prepare('SELECT id FROM stores ORDER BY sort LIMIT 1').get();
-  if (!store) throw new ValidationError(['Kein Laden angelegt']);
-  return store.id;
-}
-
 function result(db, ref, status, f) {
-  let label;
-  if (f.trip_id) {
-    const trip = db.prepare('SELECT date FROM shopping_trips WHERE id = ?').get(f.trip_id);
-    const day = DAYS[new Date(`${trip.date}T12:00:00Z`).getUTCDay()];
-    label = `Einkauf ${day} ${trip.date.slice(8)}.${trip.date.slice(5, 7)}.`;
-  } else {
-    label = `Merkliste ${db.prepare('SELECT name FROM stores WHERE id = ?').get(f.store_id).name}`;
-  }
+  // ältere Einträge können noch auf einer Merkliste stehen
+  const label = f.trip_id ? 'Einkaufsliste' : `Merkliste ${db.prepare('SELECT name FROM stores WHERE id = ?').get(f.store_id).name}`;
   return {
     ref, status, freeItemId: f.id, text: f.text, amount: f.amount, unit: f.unit,
     target: f.trip_id ? { kind: 'trip', id: f.trip_id, label } : { kind: 'store', id: f.store_id, label },

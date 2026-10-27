@@ -20,10 +20,20 @@ export function suggestTrip(db, today = todayLocal()) {
   return suggestTripRange(today, getShoppingWeekdays(db), coveredFroms);
 }
 
+/**
+ * Bis wann „Plan übernehmen“ vorschlägt: bis zum Tag vor dem übernächsten Einkaufstag,
+ * gerechnet ab dem ersten Tag, den die Liste noch nicht abdeckt.
+ */
+export function suggestPlanTo(db, today = todayLocal()) {
+  const current = getCurrentTrip(db);
+  const start = current?.planTakenAt && current.coversTo >= today ? addDays(current.coversTo, 1) : today;
+  return suggestTripRange(start, getShoppingWeekdays(db)).coversTo;
+}
+
 function toTrip(row) {
   return row && {
     id: row.id, date: row.date, coversFrom: row.covers_from, coversTo: row.covers_to, phase: row.phase,
-    createdBy: row.created_by_name ?? null, createdAt: row.created_at,
+    createdBy: row.created_by_name ?? null, createdAt: row.created_at, planTakenAt: row.plan_taken_at ?? null,
   };
 }
 
@@ -51,49 +61,178 @@ function validateRange({ date, coversFrom, coversTo }) {
   if (errors.length) throw new ValidationError(errors);
 }
 
+function insertTrip(db, { date, coversFrom, coversTo }, personId) {
+  const id = newId();
+  db.prepare(`INSERT INTO shopping_trips (id, date, covers_from, covers_to, phase, created_by, created_at, snapshot)
+              VALUES (?, ?, ?, ?, 'pantry', ?, ?, 1)`).run(id, date, coversFrom, coversTo, personId, now());
+  return getTrip(db, id);
+}
+
 /**
- * Neuer Einkauf: alle Gericht-Mahlzeiten im Zeitraum, die noch auf keiner Liste stehen, kommen drauf
- * (Bedarf wird eingefroren). Noch offene ältere Einkäufe werden dabei abgeschlossen;
- * ihre noch offenen freien Artikel wandern auf den neuen Einkauf, damit nichts verloren geht.
+ * Die Einkaufsliste ist durchgehend: Es gibt immer genau einen offenen Einkauf (eine „Runde“).
+ * Fehlt er (frische Datenbank), wird eine leere Runde angelegt – ohne Mahlzeiten zu übernehmen.
+ */
+export function ensureCurrentTrip(db, personId = null) {
+  const current = getCurrentTrip(db);
+  if (current) return current;
+  const last = db.prepare('SELECT covers_from, covers_to FROM shopping_trips ORDER BY created_at DESC LIMIT 1').get();
+  const yesterday = addDays(todayLocal(), -1);
+  return insertTrip(db, { date: todayLocal(), coversFrom: last?.covers_from ?? yesterday, coversTo: last?.covers_to ?? yesterday }, personId);
+}
+
+/**
+ * Offene Runden abschließen: Was im Wagen, vorrätig oder „nicht nötig“ ist, ist erledigt.
+ * Alles andere (offene Zutaten samt Mengen-/Ladenänderung, offene freie Artikel) wandert in die Runde `next`.
+ */
+function closeOpenTrips(db, next) {
+  const open = db.prepare(`${SELECT_TRIP} WHERE t.phase != 'done' AND t.id != ?`).all(next.id).map(toTrip);
+  const moveSource = db.prepare('UPDATE trip_sources SET trip_id = ? WHERE id = ?');
+  const moveMeal = db.prepare('UPDATE meals SET trip_id = ? WHERE id = ? AND trip_id = ?');
+  const moveFree = db.prepare('UPDATE free_items SET trip_id = ? WHERE id = ?');
+  const copyItem = db.prepare(`INSERT OR REPLACE INTO trip_items (trip_id, product_id, part, state, amount, unit, use_fallback, updated_by, updated_at)
+                               SELECT ?, product_id, part, state, amount, unit, use_fallback, updated_by, updated_at
+                               FROM trip_items WHERE trip_id = ? AND product_id = ? AND part = ?`);
+  for (const trip of open) {
+    const list = buildTripList(db, trip);
+    for (const item of list.items.filter(i => i.state === 'open')) {
+      for (const s of item.sources) {
+        if (s.type === 'meal') {
+          moveSource.run(next.id, s.id);
+          if (s.mealId) moveMeal.run(next.id, s.mealId, trip.id);
+        } else {
+          moveFree.run(next.id, s.freeItemId);
+        }
+      }
+      copyItem.run(next.id, trip.id, item.productId, item.part);
+    }
+    for (const f of list.freeItems) if (f.state === 'open') moveFree.run(next.id, f.id);
+    db.prepare("UPDATE shopping_trips SET phase = 'done' WHERE id = ?").run(trip.id);
+  }
+}
+
+/** „Einkauf fertig“: Erledigtes verschwindet, der Rest steht in der neuen Runde weiter auf der Liste. */
+export function finishTrip(db, personId = null) {
+  return db.transaction(() => {
+    const current = getCurrentTrip(db);
+    const next = insertTrip(db, {
+      date: todayLocal(),
+      coversFrom: current?.coversFrom ?? addDays(todayLocal(), -1),
+      coversTo: current?.coversTo ?? addDays(todayLocal(), -1),
+    }, personId);
+    closeOpenTrips(db, next);
+    return getTrip(db, next.id);
+  })();
+}
+
+/**
+ * „Plan übernehmen“: alle Gericht-Mahlzeiten von heute bis `to`, die noch auf keiner Liste stehen
+ * und noch nicht zubereitet sind, kommen auf die Liste (Bedarf wird eingefroren).
+ */
+export function takeOverPlan(db, { to, from = todayLocal() }, personId = null) {
+  if (!DATE.test(to ?? '')) throw new ValidationError(['Datum „bis“ fehlt oder ist ungültig']);
+  if (to < from) throw new ValidationError(['„bis“ liegt vor heute']);
+  return db.transaction(() => {
+    const trip = ensureCurrentTrip(db, personId);
+    const at = now();
+    const coversFrom = trip.planTakenAt && trip.coversFrom < from ? trip.coversFrom : from;
+    const coversTo = trip.planTakenAt && trip.coversTo > to ? trip.coversTo : to;
+    db.prepare('UPDATE shopping_trips SET covers_from = ?, covers_to = ?, plan_taken_at = ? WHERE id = ?').run(coversFrom, coversTo, at, trip.id);
+    const updated = getTrip(db, trip.id);
+    commitMeals(db, updated, uncommittedMealIds(db, from, to), at);
+    return updated;
+  })();
+}
+
+/**
+ * Neuer Einkauf mit Zeitraum (ältere App-Versionen): wie „Einkauf fertig“ + „Plan übernehmen“ für den Zeitraum.
+ * Offenes aus der bisherigen Runde geht dabei nicht verloren.
  */
 export function createTrip(db, input, personId = null) {
   const range = { ...suggestTrip(db), ...input };
   validateRange(range);
   return db.transaction(() => {
-    const id = newId();
-    const createdAt = now();
-    db.prepare(`INSERT INTO shopping_trips (id, date, covers_from, covers_to, phase, created_by, created_at, snapshot)
-                VALUES (?, ?, ?, ?, 'pantry', ?, ?, 1)`).run(id, range.date, range.coversFrom, range.coversTo, personId, createdAt);
-    db.prepare(`UPDATE free_items SET trip_id = ? WHERE state = 'open'
-                  AND trip_id IN (SELECT id FROM shopping_trips WHERE phase != 'done' AND id != ?)`).run(id, id);
-    db.prepare("UPDATE shopping_trips SET phase = 'done' WHERE phase != 'done' AND id != ?").run(id);
-    const trip = getTrip(db, id);
-    commitMeals(db, trip, uncommittedMealIds(db, trip.coversFrom, trip.coversTo), createdAt);
-    return trip;
+    const trip = insertTrip(db, range, personId);
+    closeOpenTrips(db, trip);
+    db.prepare('UPDATE shopping_trips SET plan_taken_at = created_at WHERE id = ?').run(trip.id);
+    commitMeals(db, trip, uncommittedMealIds(db, trip.coversFrom, trip.coversTo), trip.createdAt);
+    return getTrip(db, trip.id);
   })();
 }
 
 function uncommittedMealIds(db, from, to) {
   return db.prepare(`SELECT m.id FROM meals m JOIN dishes d ON d.id = m.dish_id
-                     WHERE m.kind = 'dish' AND d.kind != 'takeaway' AND m.trip_id IS NULL AND m.date BETWEEN ? AND ?`).pluck().all(from, to);
+                     WHERE m.kind = 'dish' AND d.kind != 'takeaway' AND m.trip_id IS NULL AND m.status != 'prepared'
+                       AND m.date BETWEEN ? AND ?`).pluck().all(from, to);
 }
 
-/** Mahlzeiten auf einen Einkauf setzen und ihren Bedarf (neu) einfrieren. */
+/**
+ * Mahlzeiten auf einen Einkauf setzen und ihren Bedarf (neu) einfrieren.
+ * Kurz haltbare Zutaten bekommen „kaufen ab“; ob sie (noch) unter „Später“ stehen, entscheidet die Liste nach dem heutigen Tag.
+ */
 function commitMeals(db, trip, mealIds, addedAt = now()) {
   if (!mealIds.length) return;
   const shelfLife = db.prepare('SELECT shelf_life_days FROM products WHERE id = ?').pluck();
   const insert = db.prepare(`INSERT INTO trip_sources (trip_id, meal_id, product_id, part, amount, unit, buy_from, date, slot_name, dish_name, via_dish, added_at)
                              VALUES (@tripId, @mealId, @productId, @part, @amount, @unit, @buyFrom, @date, @slotName, @dishName, @viaDish, @addedAt)`);
+  const today = todayLocal();
   for (const mealId of mealIds) {
+    const before = new Set(db.prepare('SELECT product_id FROM trip_sources WHERE trip_id = ? AND meal_id = ?').pluck().all(trip.id, mealId));
     db.prepare('DELETE FROM trip_sources WHERE trip_id = ? AND meal_id = ?').run(trip.id, mealId);
     db.prepare('UPDATE meals SET trip_id = ? WHERE id = ?').run(trip.id, mealId);
     for (const source of collectNeeds(db, { mealIds: [mealId] })) {
       const days = shelfLife.get(source.productId);
       const buyFrom = days ? addDays(source.date, -days) : null;
-      const part = buyFrom && buyFrom > trip.date ? 'later' : 'now';
-      insert.run({ tripId: trip.id, ...source, viaDish: source.viaDish ?? null, part, buyFrom: part === 'later' ? buyFrom : null, addedAt });
+      const part = buyFrom && buyFrom > today ? 'later' : 'now';
+      if (!before.has(source.productId)) reopenDoneLine(db, trip.id, source.productId, part, today);
+      insert.run({ tripId: trip.id, ...source, viaDish: source.viaDish ?? null, part, buyFrom, addedAt });
     }
   }
+}
+
+/**
+ * Neuer Bedarf für eine schon erledigte Zeile (im Wagen, vorrätig, „nicht nötig“): Das Erledigte ist abgeschlossen,
+ * die Zeile beginnt mit dem neuen Bedarf wieder offen – sonst liefe er unbemerkt als „erledigt“ mit.
+ */
+function reopenDoneLine(db, tripId, productId, part, today) {
+  const ti = db.prepare('SELECT state FROM trip_items WHERE trip_id = ? AND product_id = ? AND part = ?').get(tripId, productId, part);
+  if (!ti || ti.state === 'open') return;
+  const remove = db.prepare('DELETE FROM trip_sources WHERE id = ?');
+  for (const s of db.prepare('SELECT id, buy_from FROM trip_sources WHERE trip_id = ? AND product_id = ?').all(tripId, productId)) {
+    if ((s.buy_from && s.buy_from > today ? 'later' : 'now') === part) remove.run(s.id);
+  }
+  // von Hand dazugeschriebene Mengen bleiben als eigener, erledigter Artikel sichtbar
+  if (part === 'now') {
+    db.prepare('UPDATE free_items SET product_id = NULL, state = ?, done_at = COALESCE(done_at, ?) WHERE trip_id = ? AND product_id = ?')
+      .run(ti.state, now(), tripId, productId);
+  }
+  db.prepare('DELETE FROM trip_items WHERE trip_id = ? AND product_id = ? AND part = ?').run(tripId, productId, part);
+}
+
+/**
+ * Offene Zutaten einer Mahlzeit auf der aktuellen Liste (für die Nachfrage bei „Zubereitet“ und beim Löschen):
+ * nur Zeilen, die noch nicht im Wagen/vorrätig/„nicht nötig“ sind, und nur der Anteil dieser Mahlzeit.
+ */
+export function openNeedsOfMeal(db, mealId) {
+  const trip = getCurrentTrip(db);
+  if (!trip) return [];
+  return buildTripList(db, trip).items
+    .filter(i => i.state === 'open')
+    .map(i => ({ item: i, own: i.sources.filter(s => s.type === 'meal' && s.mealId === mealId) }))
+    .filter(({ own }) => own.length)
+    .map(({ item, own }) => ({
+      productId: item.productId, name: item.name, part: item.part, sourceIds: own.map(s => s.id),
+      display: sumAmounts(own.map(s => ({ amount: s.amount, unit: s.unit }))).map(n => formatAmount(n.amount, n.unit)).join(' + '),
+    }));
+}
+
+/** Offene Zutaten einer Mahlzeit von der Liste nehmen. Gekauftes bleibt stehen. */
+export function releaseMealNeeds(db, mealId) {
+  return db.transaction(() => {
+    const needs = openNeedsOfMeal(db, mealId);
+    const remove = db.prepare('DELETE FROM trip_sources WHERE id = ?');
+    for (const need of needs) for (const id of need.sourceIds) remove.run(id);
+    return needs;
+  })();
 }
 
 /** Ältere Einkäufe ohne Momentaufnahme (vor Migration 002) einmalig einfrieren. */
@@ -253,6 +392,7 @@ export function addFreeItem(db, { tripId = null, storeId = null, text, productId
   const product = productId
     ? db.prepare('SELECT id, name FROM products WHERE id = ?').get(productId)
     : db.prepare('SELECT id, name FROM products WHERE name = ?').get(parsed.productName);
+  if (tripId && product) reopenDoneLine(db, tripId, product.id, 'now', todayLocal());
   const id = newId();
   db.prepare(`INSERT INTO free_items (id, trip_id, store_id, product_id, text, amount, unit, created_by, created_at)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -330,7 +470,7 @@ export function collectNeeds(db, { from = null, to = null, mealIds = null } = {}
  * Vollständige Einkaufsliste eines Einkaufs: eingefrorener Bedarf + Eingriffe + freie Artikel + Merkliste.
  * Pro Produkt eine Zeile (bzw. zwei, wenn ein Teil wegen Haltbarkeit erst später gekauft wird).
  */
-export function buildTripList(db, trip) {
+export function buildTripList(db, trip, today = todayLocal()) {
   ensureSnapshot(db, trip);
   const products = new Map(db.prepare(`
     SELECT p.id, p.name, p.unit, p.is_staple, p.shelf_life_days, p.section_id, p.group_id,
@@ -353,16 +493,18 @@ export function buildTripList(db, trip) {
     return lines.get(key);
   };
 
-  // „neu“: nach dem Erstellen des Einkaufs hinzugekommen (mit etwas Toleranz)
-  const newAfter = new Date(Date.parse(trip.createdAt) + 5000).toISOString();
-  const frozen = db.prepare(`SELECT meal_id AS mealId, product_id AS productId, part, amount, unit, buy_from AS buyFrom, date,
+  // „neu“: nach der letzten Planübernahme hinzugekommen (mit etwas Toleranz)
+  const newAfter = new Date(Date.parse(trip.planTakenAt ?? trip.createdAt) + 5000).toISOString();
+  const frozen = db.prepare(`SELECT id, meal_id AS mealId, product_id AS productId, amount, unit, buy_from AS buyFrom, date,
                                     slot_name AS slotName, dish_name AS dishName, via_dish AS viaDish, added_at AS addedAt
                              FROM trip_sources WHERE trip_id = ? ORDER BY date, id`).all(trip.id);
   for (const source of frozen) {
     if (!products.has(source.productId)) continue;
-    const line = lineFor(source.productId, source.part);
-    line.sources.push({ type: 'meal', ...source, isNew: source.addedAt > newAfter });
-    if (source.part === 'later' && (!line.buyFrom || source.buyFrom < line.buyFrom)) line.buyFrom = source.buyFrom;
+    // „Später“ nur, solange der Kauftag noch nicht erreicht ist – danach steht es von selbst in der normalen Liste
+    const part = source.buyFrom && source.buyFrom > today ? 'later' : 'now';
+    const line = lineFor(source.productId, part);
+    line.sources.push({ type: 'meal', ...source, part, isNew: source.addedAt > newAfter });
+    if (part === 'later' && (!line.buyFrom || source.buyFrom < line.buyFrom)) line.buyFrom = source.buyFrom;
   }
 
   const freeItems = db.prepare(`SELECT f.*, p.name AS created_by_name FROM free_items f

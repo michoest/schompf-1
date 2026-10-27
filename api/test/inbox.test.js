@@ -1,7 +1,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { openDatabase, newId, now } from '../src/db/index.js';
-import { createTrip, updateTrip } from '../src/repo/trips.js';
+import { createTrip, finishTrip } from '../src/repo/trips.js';
 import { addInboxItems } from '../src/repo/inbox.js';
 
 let db, ids;
@@ -30,7 +30,7 @@ test('offener Einkauf → Artikel landet im aktuellen Einkauf', () => {
   const trip = createTrip(db, { date: '2026-10-14', coversFrom: '2026-10-14', coversTo: '2026-10-16' });
   const [r] = addInboxItems(db, [item('kairos:1', '3 Trone')], ids.person);
   assert.equal(r.status, 'created');
-  assert.deepEqual(r.target, { kind: 'trip', id: trip.id, label: 'Einkauf Mi 14.10.' });
+  assert.deepEqual(r.target, { kind: 'trip', id: trip.id, label: 'Einkaufsliste' });
   assert.equal(r.text, 'Trone');
   assert.equal(r.amount, 3);
   const row = db.prepare('SELECT * FROM free_items WHERE id = ?').get(r.freeItemId);
@@ -38,31 +38,26 @@ test('offener Einkauf → Artikel landet im aktuellen Einkauf', () => {
   assert.equal(row.created_by, ids.person);
 });
 
-test('erledigter Einkauf zählt nicht als offen', () => {
-  const trip = createTrip(db, { date: '2026-10-14', coversFrom: '2026-10-14', coversTo: '2026-10-16' });
-  updateTrip(db, trip.id, { phase: 'done' });
+test('nach „Einkauf fertig“ → neue Runde der Liste', () => {
+  createTrip(db, { date: '2026-10-14', coversFrom: '2026-10-14', coversTo: '2026-10-16' });
+  const next = finishTrip(db);
   const [r] = addInboxItems(db, [item('kairos:1', 'Trone')], ids.person);
-  assert.equal(r.target.kind, 'store');
+  assert.equal(r.target.id, next.id);
 });
 
-test('kein offener Einkauf, bekanntes Produkt → Merkliste des bevorzugten Ladens', () => {
-  const [trone, mittel] = addInboxItems(db, [item('kairos:1', 'Trone'), item('kairos:2', 'Waschmittel', { note: 'das ohne Duft' })], ids.person);
-  assert.deepEqual(trone.target, { kind: 'store', id: ids.markt, label: 'Merkliste Markt' });
-  assert.deepEqual(mittel.target, { kind: 'store', id: ids.dm, label: 'Merkliste dm' });
-  assert.equal(mittel.text, 'Waschmittel', 'erkanntes Produkt behält seinen Namen, Notiz entfällt');
-});
-
-test('unbekanntes Produkt → Merkliste We, Notiz in Klammern', () => {
-  const [r] = addInboxItems(db, [item('kairos:1', '2 l Hafermilch', { note: 'Barista' })], ids.person);
-  assert.deepEqual(r.target, { kind: 'store', id: ids.we, label: 'Merkliste We' });
-  assert.equal(r.text, 'Hafermilch (Barista)');
-  assert.equal(r.amount, 2);
-  assert.equal(r.unit, 'l');
+test('ohne Einkauf → es wird eine Liste angelegt; unbekanntes Produkt mit Notiz in Klammern', () => {
+  const [trone, milch] = addInboxItems(db, [item('kairos:1', 'Trone', { note: 'Bio' }), item('kairos:2', '2 l Hafermilch', { note: 'Barista' })], ids.person);
+  assert.equal(trone.target.kind, 'trip');
+  assert.equal(milch.target.id, trone.target.id);
+  assert.equal(trone.text, 'Trone', 'erkanntes Produkt behält seinen Namen, Notiz entfällt');
+  assert.equal(milch.text, 'Hafermilch (Barista)');
+  assert.equal(milch.amount, 2);
+  assert.equal(milch.unit, 'l');
 });
 
 test('Wortanfang reicht nicht für die Zuordnung (#3)', () => {
   const [r] = addInboxItems(db, [item('kairos:1', 'Tronensaft')], ids.person);
-  assert.equal(r.target.id, ids.we);
+  assert.equal(db.prepare('SELECT product_id FROM free_items WHERE id = ?').get(r.freeItemId).product_id, null);
 });
 
 test('gleiche ref zweimal → exists, kein Duplikat', () => {

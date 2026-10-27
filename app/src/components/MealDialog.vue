@@ -37,10 +37,15 @@ const showDetails = ref(null)
 // Einkaufsliste: nur mitändern, wenn ausdrücklich gewählt (Vorschau zeigt, was sich ändern würde)
 const preview = ref(null)        // { trip, committed, done, delta[] }
 const syncTrip = ref(true)
-const removePreview = ref(null)  // Vorschau fürs Löschen
+// Zubereitet/Löschen: noch offene Zutaten dieser Mahlzeit auf der Liste (nach Nachfrage entfernen)
+const openNeeds = ref([])
+const releaseNeeds = ref(true)
+const confirmPrepared = ref(false)
 let previewTimer = null
 
 const QUICK_MINUTES = 30
+// Vorgaben für „Sonstiges“; alles andere über das Freitextfeld
+const TEXT_OPTIONS = ['Repmeal', 'Holschompf', 'Schompfen watscheln']
 const kinds = [
   { value: 'dish', title: 'Gericht', icon: 'mdi-pot-steam-outline' },
   { value: 'leftovers', title: 'Reste', icon: 'mdi-recycle' },
@@ -93,12 +98,13 @@ watch(open, isOpen => {
   confirmDelete.value = false
   showDetails.value = null
   preview.value = null
-  removePreview.value = null
+  openNeeds.value = []
+  releaseNeeds.value = true
+  confirmPrepared.value = false
   syncTrip.value = true
   schedulePreview()
 })
 
-const tripLabel = computed(() => preview.value?.trip ? `vom ${shortDate(preview.value.trip.date)}` : '')
 const deltaText = computed(() => (preview.value?.delta ?? []).map(d => `${d.display} ${d.name}`).join(', '))
 // Kästchen nur, wenn sich an der Liste etwas ändern würde und der Einkauf noch offen ist
 const offerSync = computed(() => !!preview.value?.trip && !preview.value.done && (preview.value.delta.length > 0 || (!preview.value.committed && kind.value === 'dish')))
@@ -114,9 +120,27 @@ function schedulePreview() {
 }
 watch([kind, dishId, servings, chosen, included, date], schedulePreview, { deep: true })
 
+const needsText = computed(() => openNeeds.value.map(n => `${n.display} ${n.name}`.trim()).join(', '))
+
+async function loadOpenNeeds() {
+  try { openNeeds.value = await api.mealOpenNeeds(props.meal.id) } catch { openNeeds.value = [] }
+}
+
 async function askRemove() {
+  confirmPrepared.value = false
   confirmDelete.value = true
-  try { removePreview.value = await api.previewMeal({ id: props.meal.id, remove: true }) } catch { removePreview.value = null }
+  await loadOpenNeeds()
+}
+
+// Zubereitet: stehen noch offene Zutaten auf der Liste, erst nachfragen
+async function markPrepared() {
+  if (!confirmPrepared.value) {
+    busy.value = true
+    await loadOpenNeeds()
+    busy.value = false
+    if (openNeeds.value.length) { confirmDelete.value = false; confirmPrepared.value = true; return }
+  }
+  await save({ status: 'prepared', releaseNeeds: confirmPrepared.value && releaseNeeds.value })
 }
 
 function chooseDish(d) {
@@ -169,8 +193,7 @@ async function save(extra = {}) {
 async function remove() {
   busy.value = true
   try {
-    const removeFromList = !!removePreview.value?.trip && !removePreview.value.done && removePreview.value.delta.length > 0 && syncTrip.value
-    await api.deleteMeal(props.meal.id, removeFromList)
+    await api.deleteMeal(props.meal.id, openNeeds.value.length > 0 && releaseNeeds.value)
     emit('saved', null)
     open.value = false
   } catch (e) {
@@ -284,7 +307,13 @@ async function remove() {
 
         <!-- Reste / Sonstiges -->
         <v-text-field v-if="kind === 'leftovers'" v-model="text" label="Welche Reste? (optional)" placeholder="z.B. Sagne" />
-        <v-text-field v-if="kind === 'text'" v-model="text" label="Was gibt es?" placeholder="z.B. Holschompf, Mamaschompf, Snack" autofocus />
+        <template v-if="kind === 'text'">
+          <div class="chips mb-4">
+            <v-chip v-for="o in TEXT_OPTIONS" :key="o" :color="text === o ? 'primary' : undefined" :variant="text === o ? 'flat' : 'outlined'"
+              :prepend-icon="text === o ? 'mdi-check' : undefined" @click="text = text === o ? '' : o">{{ o }}</v-chip>
+          </div>
+          <v-text-field v-model="text" label="Oder selbst eingeben" placeholder="z.B. Mamaschompf, Snack" />
+        </template>
 
         <!-- Verschieben: nur beim Bearbeiten -->
         <template v-if="isEdit">
@@ -297,27 +326,28 @@ async function remove() {
       </v-card-text>
 
       <!-- Einkaufsliste -->
-      <div v-if="confirmDelete && removePreview?.trip && !removePreview.done && removePreview.delta.length" class="trip-sync px-4 py-2">
-        <v-checkbox v-model="syncTrip" hide-details density="compact" color="primary">
+      <div v-if="(confirmDelete || confirmPrepared) && openNeeds.length" class="trip-sync px-4 py-2">
+        <div v-if="confirmPrepared" class="text-body-2 pt-1">Noch nicht gekauft: {{ needsText }}</div>
+        <v-checkbox v-model="releaseNeeds" hide-details density="compact" color="primary">
           <template #label>
-            <span class="text-body-2">Zutaten von der Einkaufsliste {{ `vom ${shortDate(removePreview.trip.date)}` }} nehmen
-              <span class="text-medium-emphasis">({{ removePreview.delta.map(d => `${d.display} ${d.name}`).join(', ') }})</span></span>
+            <span class="text-body-2">Von der Einkaufsliste nehmen
+              <span v-if="confirmDelete" class="text-medium-emphasis">({{ needsText }})</span></span>
           </template>
         </v-checkbox>
       </div>
-      <div v-else-if="!confirmDelete && offerSync" class="trip-sync px-4 py-2">
+      <div v-else-if="!confirmDelete && !confirmPrepared && offerSync" class="trip-sync px-4 py-2">
         <v-checkbox v-model="syncTrip" hide-details density="compact" color="primary">
           <template #label>
             <span class="text-body-2">
-              {{ preview.committed ? 'Einkaufsliste' : 'Auf die Einkaufsliste' }} {{ tripLabel }}{{ preview.committed ? ' anpassen' : '' }}
+              {{ preview.committed ? 'Einkaufsliste anpassen' : 'Auf die Einkaufsliste' }}
               <span v-if="deltaText" class="text-medium-emphasis">({{ deltaText }})</span>
             </span>
           </template>
         </v-checkbox>
       </div>
-      <div v-else-if="!confirmDelete && preview?.committed" class="trip-sync px-4 py-3 text-body-2 text-medium-emphasis">
+      <div v-else-if="!confirmDelete && !confirmPrepared && preview?.committed" class="trip-sync px-4 py-3 text-body-2 text-medium-emphasis">
         <v-icon icon="mdi-cart-check" size="small" class="mr-1" />
-        {{ preview.done ? `Eingekauft (Einkauf ${tripLabel})` : `Steht auf der Einkaufsliste ${tripLabel}` }}
+        {{ preview.done ? 'Eingekauft' : 'Steht auf der Einkaufsliste' }}
       </div>
 
       <v-divider />
@@ -325,7 +355,8 @@ async function remove() {
         <template v-if="isEdit">
           <v-btn v-if="!confirmDelete" icon="mdi-delete-outline" color="error" variant="text" aria-label="Löschen" @click="askRemove" />
           <v-btn v-else color="error" variant="flat" :loading="busy" @click="remove">Löschen</v-btn>
-          <v-btn v-if="status === 'planned'" variant="text" prepend-icon="mdi-check" :loading="busy" @click="save({ status: 'prepared' })">Zubereitet</v-btn>
+          <v-btn v-if="status === 'planned'" :variant="confirmPrepared ? 'flat' : 'text'" :color="confirmPrepared ? 'primary' : undefined"
+            prepend-icon="mdi-check" :loading="busy" @click="markPrepared">Zubereitet</v-btn>
           <v-btn v-else variant="text" :loading="busy" @click="save({ status: 'planned' })">Nicht zubereitet</v-btn>
         </template>
         <v-spacer />
