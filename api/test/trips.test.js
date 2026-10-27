@@ -247,3 +247,14 @@ test('Freie Artikel: exakter Produktname zählt beim Produkt mit, sonst eigene Z
   assert.deepEqual(list.freeItems.map(f => [f.text, f.display]), [['Tro', '2'], ['Waschmittel', '']]);
   assert.deepEqual(list.reminders.map(r => r.text), ['Blumen']);
 });
+
+test('Neuer Einkauf übernimmt offene freie Artikel des abgeschlossenen Einkaufs', () => {
+  const alt = trip('2026-10-14', '2026-10-16');
+  addFreeItem(db, { tripId: alt.id, text: 'Regano' });
+  const erledigt = addFreeItem(db, { tripId: alt.id, text: 'Brezeln' });
+  db.prepare("UPDATE free_items SET state = 'in_cart' WHERE id = ?").run(erledigt.id);
+  const neu = trip('2026-10-17', '2026-10-20');
+  assert.equal(getTripFresh(alt.id).phase, 'done');
+  assert.deepEqual(buildTripList(db, neu).freeItems.map(f => f.text), ['Regano']);
+  assert.deepEqual(buildTripList(db, getTripFresh(alt.id)).freeItems.map(f => f.text), ['Brezeln']);
+});

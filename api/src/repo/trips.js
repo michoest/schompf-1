@@ -53,17 +53,20 @@ function validateRange({ date, coversFrom, coversTo }) {
 
 /**
  * Neuer Einkauf: alle Gericht-Mahlzeiten im Zeitraum, die noch auf keiner Liste stehen, kommen drauf
- * (Bedarf wird eingefroren). Noch offene ältere Einkäufe werden dabei abgeschlossen.
+ * (Bedarf wird eingefroren). Noch offene ältere Einkäufe werden dabei abgeschlossen;
+ * ihre noch offenen freien Artikel wandern auf den neuen Einkauf, damit nichts verloren geht.
  */
 export function createTrip(db, input, personId = null) {
   const range = { ...suggestTrip(db), ...input };
   validateRange(range);
   return db.transaction(() => {
-    db.prepare("UPDATE shopping_trips SET phase = 'done' WHERE phase != 'done'").run();
     const id = newId();
     const createdAt = now();
     db.prepare(`INSERT INTO shopping_trips (id, date, covers_from, covers_to, phase, created_by, created_at, snapshot)
                 VALUES (?, ?, ?, ?, 'pantry', ?, ?, 1)`).run(id, range.date, range.coversFrom, range.coversTo, personId, createdAt);
+    db.prepare(`UPDATE free_items SET trip_id = ? WHERE state = 'open'
+                  AND trip_id IN (SELECT id FROM shopping_trips WHERE phase != 'done' AND id != ?)`).run(id, id);
+    db.prepare("UPDATE shopping_trips SET phase = 'done' WHERE phase != 'done' AND id != ?").run(id);
     const trip = getTrip(db, id);
     commitMeals(db, trip, uncommittedMealIds(db, trip.coversFrom, trip.coversTo), createdAt);
     return trip;
