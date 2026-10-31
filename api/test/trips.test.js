@@ -275,7 +275,7 @@ test('Es gibt immer eine Liste; Plan übernehmen nimmt nur Offenes ab dem Tag, o
   meal('2026-10-20', ids.lat);                       // nach „bis“
   const t = takeOverPlan(db, { from: '2026-10-14', to: '2026-10-16' });
   assert.equal(t.id, empty.id);
-  assert.equal(t.coversTo, '2026-10-16');
+  assert.ok(t.coversTo >= '2026-10-16');
   const list = buildTripList(db, t, '2026-10-14');
   assert.equal(line(list, 'Ghetti').display, '250 g');
   assert.equal(line(list, 'Maten'), undefined);

@@ -2,9 +2,9 @@
 import { ref, computed, watch } from 'vue'
 import api from '@/services/api'
 import { useAppStore } from '@/stores'
-import { shortDate, today } from '@/utils/format'
+import { shortDate, today, planCoverage } from '@/utils/format'
 
-// „Plan übernehmen“: geplante Gerichte von heute bis zum gewählten Tag kommen auf die Einkaufsliste
+// „Aus Plan holen“: geplante Gerichte von heute bis zum gewählten Tag kommen auf die Einkaufsliste
 const props = defineProps({
   modelValue: Boolean,
   trip: { type: Object, default: null },   // aktueller Einkauf (für „bisher bis …“)
@@ -38,7 +38,7 @@ async function save() {
 
 <template>
   <v-dialog v-model="open" max-width="420">
-    <v-card title="Plan übernehmen">
+    <v-card title="Gerichte aus dem Plan holen">
       <v-card-text>
         <p class="text-body-2 mb-4">
           Alle geplanten Gerichte von heute bis zum gewählten Tag, die noch nicht auf der Liste stehen
@@ -46,12 +46,12 @@ async function save() {
         </p>
         <v-text-field v-model="to" type="date" label="Essen bis einschließlich" :min="today()" />
         <p v-if="to" class="text-caption text-medium-emphasis">Heute bis {{ shortDate(to) }}</p>
-        <p v-if="trip?.planTakenAt" class="text-caption text-medium-emphasis mt-2">Bisher übernommen bis {{ shortDate(trip.coversTo) }}.</p>
+        <p v-if="planCoverage(trip)" class="text-caption text-medium-emphasis mt-2">Bisher sind Gerichte bis {{ shortDate(planCoverage(trip)) }} auf der Liste.</p>
       </v-card-text>
       <v-card-actions>
         <v-spacer />
         <v-btn variant="text" @click="open = false">Abbrechen</v-btn>
-        <v-btn color="primary" variant="flat" :loading="busy" :disabled="!to" @click="save">Übernehmen</v-btn>
+        <v-btn color="primary" variant="flat" :loading="busy" :disabled="!to" @click="save">Holen</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

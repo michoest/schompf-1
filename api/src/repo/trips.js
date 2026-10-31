@@ -26,7 +26,7 @@ export function suggestTrip(db, today = todayLocal()) {
  */
 export function suggestPlanTo(db, today = todayLocal()) {
   const current = getCurrentTrip(db);
-  const start = current?.planTakenAt && current.coversTo >= today ? addDays(current.coversTo, 1) : today;
+  const start = current && current.coversTo >= today ? addDays(current.coversTo, 1) : today;
   return suggestTripRange(start, getShoppingWeekdays(db)).coversTo;
 }
 
@@ -134,8 +134,10 @@ export function takeOverPlan(db, { to, from = todayLocal() }, personId = null) {
   return db.transaction(() => {
     const trip = ensureCurrentTrip(db, personId);
     const at = now();
-    const coversFrom = trip.planTakenAt && trip.coversFrom < from ? trip.coversFrom : from;
-    const coversTo = trip.planTakenAt && trip.coversTo > to ? trip.coversTo : to;
+    // schließt der bisherige Zeitraum an, wird er erweitert – sonst beginnt er heute
+    const continues = trip.coversTo >= addDays(from, -1);
+    const coversFrom = continues && trip.coversFrom < from ? trip.coversFrom : from;
+    const coversTo = continues && trip.coversTo > to ? trip.coversTo : to;
     db.prepare('UPDATE shopping_trips SET covers_from = ?, covers_to = ?, plan_taken_at = ? WHERE id = ?').run(coversFrom, coversTo, at, trip.id);
     const updated = getTrip(db, trip.id);
     commitMeals(db, updated, uncommittedMealIds(db, from, to), at);
