@@ -5,19 +5,38 @@ import api from '@/services/api'
 import { useAppStore, useDataStore } from '@/stores'
 import { useLiveStore } from '@/stores/live'
 import { today, addDays, longDate, shortDate, formatNumber, includedOptionalIds } from '@/utils/format'
+import MealDialog from '@/components/MealDialog.vue'
 
 const router = useRouter()
 const appStore = useAppStore()
 const data = useDataStore()
 const live = useLiveStore()
 
+// Standard: heute und morgen; frühere und spätere Tage lassen sich in 3er-Schritten einblenden
+const STEP = 3
+const before = ref(0)
+const after = ref(1)
 const meals = ref([])
-const days = computed(() => [today(), addDays(today(), 1)])
+const days = computed(() => Array.from({ length: before.value + after.value + 1 }, (_, i) => addDays(today(), i - before.value)))
 
 async function load() {
   try {
-    meals.value = await api.meals(today(), addDays(today(), 1))
+    meals.value = await api.meals(days.value[0], days.value.at(-1))
   } catch (e) { appStore.showError(e) }
+}
+function showEarlier() { before.value += STEP; load() }
+function showLater() { after.value += STEP; load() }
+const isPast = date => date < today()
+
+// Leerer Tag: direkt eine der festen Mahlzeiten eintragen
+const fixedSlots = computed(() => data.slots.filter(s => !s.optional))
+const dialog = ref(false)
+const newDate = ref(null)
+const newSlot = ref(null)
+function addMeal(date, slotId) {
+  newDate.value = date
+  newSlot.value = slotId
+  dialog.value = true
 }
 watch(() => live.version.meals, load)
 onMounted(load)
@@ -63,8 +82,10 @@ async function setPrepared(m, prepared, releaseNeeds) {
 
 <template>
   <div>
-    <div v-for="(date, index) in days" :key="date" class="mb-4">
-      <div class="d-flex align-baseline mb-2" :class="{ 'text-medium-emphasis': index > 0 }">
+    <v-btn block variant="text" prepend-icon="mdi-chevron-up" class="mb-2 text-medium-emphasis" @click="showEarlier">Frühere Tage</v-btn>
+
+    <div v-for="date in days" :key="date" class="mb-4" :class="{ past: isPast(date) }">
+      <div class="d-flex align-baseline mb-2" :class="{ 'text-medium-emphasis': date !== today() }">
         <span class="text-h6">{{ longDate(date) }}</span>
         <span class="text-body-2 text-medium-emphasis ml-2">{{ shortDate(date) }}</span>
       </div>
@@ -73,7 +94,7 @@ async function setPrepared(m, prepared, releaseNeeds) {
           <v-card-text class="d-flex align-center py-3">
             <div class="flex-grow-1">
               <div class="text-caption text-medium-emphasis">{{ slot.name }}</div>
-              <div :class="index === 0 ? 'text-h6' : 'text-subtitle-1'">{{ label(m) }}</div>
+              <div :class="date === today() ? 'text-h6' : 'text-subtitle-1'">{{ label(m) }}</div>
               <div v-if="m.components.length" class="text-caption">mit {{ m.components.map(c => c.dishName).join(', ') }}</div>
               <div v-if="m.kind === 'dish' && m.dishKind !== 'takeaway'" class="text-caption text-medium-emphasis d-flex align-center ga-3 mt-1">
                 <span><v-icon icon="mdi-silverware-fork-knife" size="x-small" class="mr-1" />{{ formatNumber(m.servings) }}</span>
@@ -85,10 +106,23 @@ async function setPrepared(m, prepared, releaseNeeds) {
           </v-card-text>
         </v-card>
       </template>
-      <p v-if="!meals.some(m => m.date === date)" class="text-body-2 text-medium-emphasis">
-        Noch nichts geplant. <a href="#" @click.prevent="router.push('/plan')">Zum Plan</a>
-      </p>
+      <div v-if="!meals.some(m => m.date === date)" class="empty-day">
+        <v-icon :icon="isPast(date) ? 'mdi-calendar-blank-outline' : 'mdi-silverware-variant'" size="32" class="empty-icon" />
+        <template v-if="isPast(date)">
+          <div class="text-body-2 text-medium-emphasis">An diesem Tag war nichts geplant.</div>
+        </template>
+        <template v-else>
+          <div class="text-body-1 font-weight-medium mb-3">Noch nichts geplant</div>
+          <div class="d-flex flex-wrap justify-center ga-2">
+            <v-btn v-for="slot in fixedSlots" :key="slot.id" size="small" variant="tonal" color="primary" prepend-icon="mdi-plus" @click="addMeal(date, slot.id)">{{ slot.name }}</v-btn>
+          </div>
+        </template>
+      </div>
     </div>
+
+    <v-btn block variant="text" prepend-icon="mdi-chevron-down" class="text-medium-emphasis" @click="showLater">Weitere Tage</v-btn>
+
+    <MealDialog v-model="dialog" :date="newDate" :slot-id="newSlot" @saved="load" />
 
     <v-dialog :model-value="!!pending" max-width="400" @update:model-value="pending = null">
       <v-card v-if="pending" :title="`${label(pending.meal)} zubereitet`">
@@ -109,4 +143,10 @@ async function setPrepared(m, prepared, releaseNeeds) {
 
 <style scoped>
 .prepared { opacity: 0.6; }
+.past { opacity: 0.75; }
+.empty-day {
+  text-align: center; padding: 20px 16px; border-radius: 16px;
+  border: 1.5px dashed rgba(var(--v-theme-primary), 0.25); background: rgba(var(--v-theme-primary), 0.03);
+}
+.empty-icon { color: rgba(var(--v-theme-primary), 0.55); margin-bottom: 6px; }
 </style>
