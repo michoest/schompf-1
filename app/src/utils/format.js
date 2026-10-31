@@ -20,6 +20,11 @@ export function today() {
   return isoDate()
 }
 
+/** Bis wann die Gerichte aus dem Plan auf der Einkaufsliste stehen (null = noch keine) */
+export function planCoverage(trip) {
+  return trip && trip.coversTo >= today() ? trip.coversTo : null
+}
+
 /** „Mi 14.10.“ */
 export function shortDate(date) {
   const d = toDate(date)

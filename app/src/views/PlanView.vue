@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import api from '@/services/api'
 import { useAppStore, useDataStore } from '@/stores'
 import { useLiveStore } from '@/stores/live'
-import { addDays, today, mondayOf, longDate, shortDate, formatNumber } from '@/utils/format'
+import { addDays, today, mondayOf, longDate, shortDate, formatNumber, planCoverage } from '@/utils/format'
 import MealDialog from '@/components/MealDialog.vue'
 import TripDialog from '@/components/TripDialog.vue'
 
@@ -40,7 +40,10 @@ const mealsBySlot = computed(() => {
   }
   return map
 })
-const inTrip = date => trip.value && date >= trip.value.coversFrom && date <= trip.value.coversTo
+const coverage = computed(() => planCoverage(trip.value))
+const inTrip = date => !!coverage.value && date >= today() && date <= coverage.value
+// Ausnahme markieren statt jedes Gericht: im Zeitraum der Liste, aber nicht drauf
+const missingFromList = (m, date) => inTrip(date) && m.kind === 'dish' && m.dishKind !== 'takeaway' && !m.tripId && m.status !== 'prepared'
 // Zeilen eines Tages: feste Mahlzeiten immer, optionale (Snacks/eigene) nur, wenn belegt.
 // Mahlzeiten mit eigenem Namen bekommen eine eigene Zeile an der Position ihres Slots.
 function rowsFor(date) {
@@ -112,13 +115,6 @@ function mealLabel(m) {
   if (m.kind === 'leftovers') return m.text ? `Reste: ${m.text}` : 'Reste'
   return m.text
 }
-// gleiche Symbole wie im Mahlzeit-Dialog
-function mealIcon(m) {
-  if (m.kind === 'leftovers') return 'mdi-recycle'
-  if (m.kind === 'text') return 'mdi-room-service-outline'
-  if (m.dishKind === 'takeaway') return 'mdi-moped-outline'
-  return 'mdi-pot-steam-outline'
-}
 
 watch(() => [live.version.meals, live.version.trips], load)
 onMounted(async () => {
@@ -134,11 +130,11 @@ onMounted(async () => {
       <v-card-text class="d-flex align-center py-2">
         <v-icon icon="mdi-cart-outline" class="mr-3" />
         <div class="flex-grow-1 text-body-2">
-          <template v-if="trip">Einkauf {{ shortDate(trip.date) }} · für {{ shortDate(trip.coversFrom) }} – {{ shortDate(trip.coversTo) }}</template>
-          <template v-else>Kein offener Einkauf</template>
+          <template v-if="coverage">Gerichte bis {{ shortDate(coverage) }} auf der Einkaufsliste</template>
+          <template v-else>Noch keine Gerichte auf der Einkaufsliste</template>
         </div>
-        <v-btn v-if="trip" size="small" variant="text" @click="router.push('/einkauf')">Zur Liste</v-btn>
-        <v-btn size="small" variant="flat" color="primary" @click="tripDialog = true">{{ trip ? 'Neuer Einkauf' : 'Einkauf erstellen' }}</v-btn>
+        <v-btn size="small" variant="text" @click="router.push('/einkauf')">Zur Liste</v-btn>
+        <v-btn size="small" variant="flat" color="primary" @click="tripDialog = true">Aus Plan holen</v-btn>
       </v-card-text>
     </v-card>
 
@@ -151,23 +147,23 @@ onMounted(async () => {
         <span class="text-subtitle-1 font-weight-medium">{{ longDate(date) }}</span>
         <span v-if="['Heute', 'Morgen', 'Gestern'].includes(longDate(date))" class="text-body-2 text-medium-emphasis ml-2">{{ shortDate(date) }}</span>
         <v-spacer />
-        <v-icon v-if="inTrip(date)" icon="mdi-cart-outline" size="small" color="primary" title="Im aktuellen Einkauf" />
+        <v-icon v-if="inTrip(date)" icon="mdi-cart-check" size="small" color="primary" title="Gerichte auf der Einkaufsliste" />
       </div>
-      <div v-for="row in rowsFor(date)" :key="row.key" class="slot px-4">
-        <div class="slot-head d-flex align-center">
-          <span class="slot-name">{{ row.name }}</span>
-          <v-spacer />
-          <v-btn icon="mdi-plus" size="x-small" variant="text" class="add-btn" :aria-label="`${row.name} hinzufügen`" @click="addMeal(date, row.slotId, row.label)" />
+      <div v-for="row in rowsFor(date)" :key="row.key" class="slot-row">
+        <div class="slot-name">{{ row.name }}</div>
+        <div class="slot-meals">
+          <div v-for="m in row.meals" :key="m.id" class="meal" :class="{ prepared: m.status === 'prepared', other: m.kind !== 'dish' }" @click="openMeal(m)">
+            <v-icon v-if="m.status === 'prepared'" icon="mdi-check-circle" size="16" color="primary" class="mr-1" title="zubereitet" />
+            <span class="meal-name">{{ mealLabel(m) }}</span>
+            <v-icon v-if="m.dishKind === 'takeaway'" icon="mdi-moped-outline" size="16" class="ml-1 text-medium-emphasis" title="bestellt" />
+            <v-icon v-if="missingFromList(m, date)" icon="mdi-cart-remove" size="16" color="warning" class="ml-1" title="nicht auf der Einkaufsliste" />
+            <span v-if="m.kind === 'dish' && m.dishKind !== 'takeaway'" class="servings">{{ formatNumber(m.servings) }} P.</span>
+          </div>
+          <div v-if="!row.meals.length" class="meal empty" @click="addMeal(date, row.slotId, row.label)">
+            <v-icon icon="mdi-plus" size="16" class="mr-1" />eintragen
+          </div>
         </div>
-        <div v-for="m in row.meals" :key="m.id" class="meal d-flex align-center" :class="{ prepared: m.status === 'prepared', other: m.kind !== 'dish' }" @click="openMeal(m)">
-          <v-icon :icon="mealIcon(m)" size="small" class="mr-2 text-medium-emphasis" />
-          <span class="meal-name">{{ mealLabel(m) }}</span>
-          <v-icon v-if="m.tripId" icon="mdi-cart-check" size="x-small" class="ml-2 text-medium-emphasis" title="steht auf einer Einkaufsliste" />
-          <v-icon v-if="m.status === 'prepared'" icon="mdi-check" size="small" color="primary" class="ml-2" title="zubereitet" />
-          <span v-if="m.kind === 'dish' && m.dishKind !== 'takeaway'" class="servings text-body-2 text-medium-emphasis">
-            <v-icon icon="mdi-silverware-fork-knife" size="x-small" class="mr-1" />{{ formatNumber(m.servings) }}
-          </span>
-        </div>
+        <v-btn v-if="row.meals.length" icon="mdi-plus" size="x-small" variant="text" class="add-btn" :aria-label="`${row.name} hinzufügen`" @click="addMeal(date, row.slotId, row.label)" />
       </div>
       <div class="px-2 pb-2">
         <v-menu>
@@ -211,14 +207,16 @@ onMounted(async () => {
 .trip-banner { background: linear-gradient(120deg, rgba(37, 99, 235, 0.10), rgba(79, 70, 229, 0.10)); box-shadow: none !important; }
 .day.today { border-left: 4px solid rgb(var(--v-theme-primary)); }
 .day.past { opacity: 0.7; }
-.slot { padding-bottom: 6px; }
-.slot-head { min-height: 28px; }
-.slot-name { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(var(--v-theme-on-surface), 0.5); }
-.meal { padding: 5px 4px 5px 2px; cursor: pointer; border-radius: 8px; min-height: 34px; }
+.slot-row { display: grid; grid-template-columns: 92px 1fr 28px; align-items: start; padding: 0 8px 0 16px; }
+.slot-row + .slot-row { border-top: 1px solid rgba(var(--v-theme-on-surface), 0.05); }
+.slot-name { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(var(--v-theme-on-surface), 0.45); padding-top: 11px; }
+.slot-meals { min-width: 0; padding: 3px 0; }
+.meal { display: flex; align-items: center; padding: 5px 6px; margin-left: -6px; cursor: pointer; border-radius: 8px; min-height: 32px; }
 .meal:hover { background: rgba(var(--v-theme-primary), 0.05); }
 .meal-name { flex-grow: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.meal.prepared .meal-name { color: rgba(var(--v-theme-on-surface), 0.55); font-weight: 400; }
+.meal.prepared .meal-name { color: rgba(var(--v-theme-on-surface), 0.5); font-weight: 400; }
 .meal.other .meal-name { font-style: italic; font-weight: 400; }
-.servings { margin-left: 16px; white-space: nowrap; }
-.add-btn { margin-right: -6px; }
+.meal.empty { color: rgba(var(--v-theme-on-surface), 0.35); font-size: 0.875rem; }
+.servings { margin-left: 12px; white-space: nowrap; font-size: 0.8rem; color: rgba(var(--v-theme-on-surface), 0.45); }
+.add-btn { margin-top: 4px; color: rgba(var(--v-theme-on-surface), 0.4); }
 </style>

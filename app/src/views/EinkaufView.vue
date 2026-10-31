@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import api from '@/services/api'
 import { useAppStore, useDataStore } from '@/stores'
 import { useLiveStore } from '@/stores/live'
-import { shortDate, formatAmount, parseNumber } from '@/utils/format'
+import { shortDate, formatAmount, parseNumber, planCoverage } from '@/utils/format'
 import TripDialog from '@/components/TripDialog.vue'
 
 const appStore = useAppStore()
@@ -23,10 +23,13 @@ const amountInput = ref('')
 const unitInput = ref('')
 
 const quickText = ref(null)
+const quickSearch = ref('')     // getippter Text (das Modell der Combobox setzt sich erst beim Bestätigen)
+const quickValue = computed(() => (quickSearch.value || quickText.value || '').trim())
 const quickTarget = ref('trip')  // 'trip' oder storeId (Merkliste)
 const recent = ref(new Set())    // gerade abgehakt: noch kurz an Ort und Stelle sichtbar lassen
 
 const trip = computed(() => list.value?.trip ?? null)
+const coverage = computed(() => planCoverage(trip.value))
 const nowItems = computed(() => list.value?.items.filter(i => i.part === 'now') ?? [])
 const laterItems = computed(() => list.value?.items.filter(i => i.part === 'later') ?? [])
 const byName = (a, b) => a.name.localeCompare(b.name)
@@ -186,12 +189,13 @@ const preferredName = item => {
 // Schnelleingabe: exakter Produktname wird zugeordnet, sonst freier Artikel
 const productNames = computed(() => data.products.map(p => p.name))
 async function quickAdd() {
-  const text = (quickText.value ?? '').trim()
+  const text = quickValue.value
   if (!text) return
   try {
     if (quickTarget.value === 'trip') await api.addTripFreeItem(trip.value.id, text)
     else await api.addReminder(quickTarget.value, text)
     quickText.value = null
+    quickSearch.value = ''
     appStore.showSnackbar(quickTarget.value === 'trip' ? `${text} hinzugefügt` : `${text} auf die Merkliste`)
     await load()
   } catch (e) { appStore.showError(e) }
@@ -222,7 +226,7 @@ async function finishTrip() {
 function onTripSaved(result) {
   list.value = result
   tab.value = 'pantry'
-  appStore.showSnackbar('Plan übernommen')
+  appStore.showSnackbar('Gerichte aus dem Plan geholt')
 }
 
 const sourceLabel = s => s.type === 'manual'
@@ -238,11 +242,11 @@ const sourceLabel = s => s.type === 'manual'
       <div class="flex-grow-1">
         <div class="text-subtitle-1 font-weight-medium">Einkaufsliste</div>
         <div class="text-caption text-medium-emphasis">
-          <template v-if="trip.planTakenAt">Plan bis {{ shortDate(trip.coversTo) }} übernommen</template>
-          <template v-else>Plan noch nicht übernommen</template>
+          <template v-if="coverage">Gerichte bis {{ shortDate(coverage) }} drauf</template>
+          <template v-else>Noch keine Gerichte drauf</template>
         </div>
       </div>
-      <v-btn variant="tonal" size="small" prepend-icon="mdi-calendar-arrow-right" class="mr-1" @click="tripDialog = true">Plan übernehmen</v-btn>
+      <v-btn variant="tonal" size="small" prepend-icon="mdi-calendar-arrow-right" class="mr-1" @click="tripDialog = true">Aus Plan holen</v-btn>
       <v-menu>
         <template #activator="{ props }"><v-btn icon="mdi-dots-vertical" variant="text" v-bind="props" aria-label="Mehr" /></template>
         <v-list density="compact">
@@ -251,7 +255,7 @@ const sourceLabel = s => s.type === 'manual'
       </v-menu>
     </div>
 
-    <v-btn-toggle v-model="tab" mandatory color="primary" variant="outlined" divided density="comfortable" class="w-100 mb-3">
+    <v-btn-toggle v-model="tab" mandatory color="primary" variant="outlined" density="comfortable" class="w-100 mb-3 phase-toggle">
       <v-btn value="pantry" class="flex-grow-1">Vorrat prüfen<v-badge v-if="pantryOpen" :content="pantryOpen" inline color="primary" /></v-btn>
       <v-btn value="shopping" class="flex-grow-1">Einkaufen<v-badge v-if="openCount" :content="openCount" inline color="primary" /></v-btn>
     </v-btn-toggle>
@@ -385,27 +389,28 @@ const sourceLabel = s => s.type === 'manual'
       </v-expansion-panel>
     </v-expansion-panels>
 
-    <!-- Schnelleingabe: Ziel sichtbar als Chip, ein Knopf zum Hinzufügen -->
-    <v-card class="quick-add" elevation="6">
-      <div class="px-3 pt-2">
-        <v-menu>
+    <!-- Schnelleingabe: standardmäßig auf die Einkaufsliste; Merkliste nur über das Lesezeichen -->
+    <div class="quick-add">
+      <div v-if="quickTarget !== 'trip'" class="mb-1 ml-2">
+        <v-chip size="small" color="orange-darken-2" variant="flat" prepend-icon="mdi-bookmark" closable @click:close="quickTarget = 'trip'">{{ quickTargetLabel }}</v-chip>
+      </div>
+      <div class="quick-bar" :class="{ reminder: quickTarget !== 'trip' }">
+        <v-combobox v-model="quickText" v-model:search="quickSearch" :items="productNames" :placeholder="quickTarget === 'trip' ? 'Artikel hinzufügen …' : 'Für die Merkliste …'"
+          menu-icon="" variant="plain" density="compact" hide-details hide-no-data class="quick-input" @keydown.enter="quickAdd" />
+        <v-menu location="top end">
           <template #activator="{ props }">
-            <v-chip v-bind="props" size="small" variant="tonal" :color="quickTarget === 'trip' ? 'primary' : 'orange-darken-2'"
-              :prepend-icon="quickTarget === 'trip' ? 'mdi-cart-outline' : 'mdi-bookmark-outline'" append-icon="mdi-menu-down">
-              {{ quickTargetLabel }}
-            </v-chip>
+            <v-btn v-bind="props" :icon="quickTarget === 'trip' ? 'mdi-bookmark-outline' : 'mdi-bookmark'" size="small" variant="text"
+              :color="quickTarget === 'trip' ? undefined : 'orange-darken-2'" class="text-medium-emphasis" aria-label="Ziel wählen" />
           </template>
           <v-list density="compact">
-            <v-list-item v-for="t in quickTargets" :key="t.value" :title="t.title" :subtitle="t.subtitle" :active="quickTarget === t.value" @click="quickTarget = t.value" />
+            <v-list-subheader>Hinzufügen zu</v-list-subheader>
+            <v-list-item v-for="t in quickTargets" :key="t.value" :title="t.title" :subtitle="t.subtitle" :active="quickTarget === t.value"
+              :prepend-icon="t.value === 'trip' ? 'mdi-cart-outline' : 'mdi-bookmark-outline'" @click="quickTarget = t.value" />
           </v-list>
         </v-menu>
+        <v-btn icon="mdi-arrow-up" size="small" color="primary" variant="flat" :disabled="!quickValue" class="send-btn" aria-label="Hinzufügen" @click="quickAdd" />
       </div>
-      <div class="d-flex align-center pa-2 pt-1 ga-2">
-        <v-combobox v-model="quickText" :items="productNames" placeholder="Artikel, z.B. 2 Trone" persistent-placeholder menu-icon=""
-          density="compact" hide-details hide-no-data class="flex-grow-1" @keydown.enter="quickAdd" />
-        <v-btn color="primary" icon="mdi-plus" size="small" aria-label="Hinzufügen" @click="quickAdd" />
-      </div>
-    </v-card>
+    </div>
 
     <!-- Details zu einem Artikel -->
     <v-bottom-sheet v-model="sheet">
@@ -472,10 +477,22 @@ const sourceLabel = s => s.type === 'manual'
 .done :deep(.v-list-item-title) { text-decoration: line-through; }
 .store { border-top: 4px solid transparent; }
 .section-name { text-transform: uppercase; letter-spacing: 0.05em; }
+.phase-toggle { gap: 8px; border: 0 !important; }
+.phase-toggle .v-btn { border: 1px solid rgba(var(--v-theme-primary), 0.35) !important; border-radius: 10px !important; }
 .quick-add {
   position: fixed; left: 12px; right: 12px; z-index: 5;
-  bottom: calc(64px + env(safe-area-inset-bottom));
+  bottom: calc(68px + env(safe-area-inset-bottom));
   max-width: 876px; margin: 0 auto;
 }
+.quick-bar {
+  display: flex; align-items: center; gap: 2px; padding: 4px 5px 4px 18px; border-radius: 28px;
+  background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(12px);
+  border: 1px solid rgba(var(--v-theme-primary), 0.18);
+  box-shadow: 0 6px 24px rgba(37, 99, 235, 0.14), 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+.quick-bar.reminder { border-color: rgba(234, 88, 12, 0.45); }
+.quick-input { flex-grow: 1; min-width: 0; }
+.send-btn { border-radius: 50% !important; }
+.quick-input :deep(.v-field__input) { padding-top: 6px; padding-bottom: 6px; min-height: 40px; font-size: 16px; }
 @media (min-width: 960px) { .quick-add { bottom: 16px; left: 72px; } }
 </style>
