@@ -14,6 +14,8 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const appName = env.VITE_APP_NAME || 'Schompf'
   const themeColor = env.VITE_THEME_COLOR || '#2563EB'
+  // eigene Icons für die Dev-Instanz (public/dev/), damit man sie auf dem Home-Bildschirm unterscheiden kann
+  const iconDir = env.VITE_ICON_DIR || ''
 
   return {
     define: {
@@ -27,11 +29,13 @@ export default defineConfig(({ mode }) => {
         transformIndexHtml: html => html
           .replaceAll('Schompf - Mahlzeitenplanung', `${appName} - Mahlzeitenplanung`)
           .replaceAll('#0D9488', themeColor).replaceAll('#2563EB', themeColor)
+          .replace('href="/favicon.svg"', `href="/${iconDir}favicon.svg"`)
+          .replace('href="/apple-touch-icon.png"', `href="/${iconDir}apple-touch-icon.png"`)
       },
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: false, // Registrierung in main.js (mit Selbst-Aktualisierung)
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+        includeAssets: ['favicon.ico', `${iconDir}apple-touch-icon.png`, 'mask-icon.svg'],
         manifest: {
           name: `${appName} - Mahlzeitenplanung`,
           short_name: appName,
@@ -43,17 +47,17 @@ export default defineConfig(({ mode }) => {
           start_url: '/',
           icons: [
             {
-              src: 'pwa-192x192.png',
+              src: `${iconDir}pwa-192x192.png`,
               sizes: '192x192',
               type: 'image/png'
             },
             {
-              src: 'pwa-512x512.png',
+              src: `${iconDir}pwa-512x512.png`,
               sizes: '512x512',
               type: 'image/png'
             },
             {
-              src: 'pwa-512x512.png',
+              src: `${iconDir}pwa-512x512.png`,
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any maskable'
