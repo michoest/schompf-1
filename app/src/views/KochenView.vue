@@ -87,7 +87,8 @@ async function setPrepared(m, prepared, releaseNeeds) {
     <div v-for="date in days" :key="date" class="mb-4" :class="{ past: isPast(date) }">
       <div class="d-flex align-baseline mb-2" :class="{ 'text-medium-emphasis': date !== today() }">
         <span class="text-h6">{{ longDate(date) }}</span>
-        <span class="text-body-2 text-medium-emphasis ml-2">{{ shortDate(date) }}</span>
+        <!-- Datum nur neben Gestern/Heute/Morgen – sonst steht es schon im Namen -->
+        <span v-if="['Gestern', 'Heute', 'Morgen'].includes(longDate(date))" class="text-body-2 text-medium-emphasis ml-2">{{ shortDate(date) }}</span>
       </div>
       <template v-for="slot in data.slots" :key="slot.id">
         <v-card v-for="m in mealsFor(date, slot.id)" :key="m.id" class="mb-2" :class="{ prepared: m.status === 'prepared' }" @click="open(m)">
