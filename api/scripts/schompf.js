@@ -7,6 +7,8 @@
  *   gerichte <Ordner>              alle Gerichte als Dateien in einen Ordner schreiben
  *   import <Datei|-> … [--probe]   Gericht(e) aus Datei(en) übernehmen (- = stdin); --probe zeigt nur die Änderungen
  *   uebersicht                     alle Gerichte als Tabelle (CSV)
+ *   produkte-export > p.xlsx       alle Produkte als Excel-Tabelle (Einkaufsort, Aufbewahrung, … mit Auswahllisten)
+ *   produkte-import <Datei|-> [--probe]  bearbeitete Tabelle übernehmen; --probe zeigt nur die Änderungen
  *   verlauf <Name>                 Änderungsprotokoll eines Gerichts
  *   person <Name>                  Person anlegen
  *   umbenennen <Alt> <Neu>         Person umbenennen
@@ -27,6 +29,7 @@ import { dishOverviewCsv } from '../src/domain/overview.js';
 import { createPerson, createPairingCode, listDevices, revokeDevice } from '../src/repo/auth.js';
 import { listFeedback, resolveFeedback } from '../src/repo/feedback.js';
 import webpush from 'web-push';
+import { productsToXlsx, applyXlsx } from './produkt-tabelle.js';
 
 class Rollback extends Error {}
 
@@ -71,6 +74,23 @@ try {
           const { summary } = saveDish(db, input, { source: 'import' });
           console.log(`${label}: ${summary || 'keine Änderungen'}`);
         }
+      }
+      break;
+    }
+    case 'produkte-export':
+      process.stdout.write(await productsToXlsx(db));
+      break;
+    case 'produkte-import': {
+      const file = args[0] ?? fail('Datei angeben (oder - für stdin)');
+      const probe = flags.has('--probe');
+      const report = await applyXlsx(db, readFileSync(file === '-' ? 0 : file), { probe });
+      for (const line of report.changed) console.log('  ' + line);
+      for (const name of report.created) console.log(`  neu: ${name}`);
+      if (report.errors.length) {
+        console.log(`\n${report.errors.length} Fehler – nichts übernommen:`);
+        for (const e of report.errors) console.log('  ' + e);
+      } else {
+        console.log(`\n${report.changed.length} geändert, ${report.created.length} neu${probe ? ' (Probe, nichts gespeichert)' : ''}`);
       }
       break;
     }
