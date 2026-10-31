@@ -177,14 +177,9 @@ async function deleteFree(item) {
   } catch (e) { appStore.showError(e) }
 }
 
-const fallbackName = item => {
-  const group = data.groups.find(g => g.id === item.group?.id)
-  return data.stores.find(s => s.id === group?.fallbackStoreId)?.name
-}
-const preferredName = item => {
-  const group = data.groups.find(g => g.id === item.group?.id)
-  return data.stores.find(s => s.id === group?.preferredStoreId)?.name
-}
+// Läden stehen am Produkt (Liste liefert die Namen mit)
+const fallbackName = item => item.fallbackStoreName
+const preferredName = item => item.preferredStoreName
 
 // Schnelleingabe: exakter Produktname wird zugeordnet, sonst freier Artikel
 const productNames = computed(() => data.products.map(p => p.name))
@@ -395,7 +390,7 @@ const sourceLabel = s => s.type === 'manual'
         <v-chip size="small" color="orange-darken-2" variant="flat" prepend-icon="mdi-bookmark" closable @click:close="quickTarget = 'trip'">{{ quickTargetLabel }}</v-chip>
       </div>
       <div class="quick-bar" :class="{ reminder: quickTarget !== 'trip' }">
-        <v-combobox v-model="quickText" v-model:search="quickSearch" :items="productNames" :placeholder="quickTarget === 'trip' ? 'Artikel hinzufügen …' : 'Für die Merkliste …'"
+        <v-combobox v-model="quickText" v-model:search="quickSearch" :items="(quickSearch ?? '').trim().length >= 2 ? productNames : []" :placeholder="quickTarget === 'trip' ? 'Artikel hinzufügen …' : 'Für die Merkliste …'"
           menu-icon="" variant="plain" density="compact" hide-details hide-no-data class="quick-input" @keydown.enter="quickAdd" />
         <v-menu location="top end">
           <template #activator="{ props }">

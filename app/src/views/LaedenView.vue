@@ -23,7 +23,8 @@ const groupsSorted = computed(() => data.groups)
       </v-list>
     </v-card>
 
-    <h2 class="text-subtitle-1 mb-2 mt-4">Warengruppen</h2>
+    <h2 class="text-subtitle-1 mb-1 mt-4">Warengruppen</h2>
+    <p class="text-caption text-medium-emphasis mb-2">Nur Vorschlag beim Anlegen neuer Produkte – was gilt, steht beim Produkt (Verwaltung › Produkte).</p>
     <v-card>
       <v-table density="compact">
         <thead><tr><th>Warengruppe</th><th>Zuerst</th><th>Sonst</th><th>Lagerort</th></tr></thead>

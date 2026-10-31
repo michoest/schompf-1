@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { openDatabase, newId, now } from '../src/db/index.js';
 import { suggestTripRange } from '../src/domain/dates.js';
 import { saveDish } from '../src/repo/dishes.js';
+import { groupDefaults, saveProduct } from '../src/repo/products.js';
 import { saveMeal, deleteMeal } from '../src/repo/meals.js';
 import {
   createTrip, buildTripList, setTripItem, addFreeItem, collectNeeds, suggestTrip, syncMealToTrip, previewMealSync, updateTrip,
@@ -17,8 +18,15 @@ function insert(table, row) {
   return row.id;
 }
 
+// wie beim Anlegen: Orte aus der Warengruppe vorbelegt, Angaben in extra gehen vor
 function product(name, unit, groupId, extra = {}) {
-  return insert('products', { id: newId(), name, unit, group_id: groupId, created_at: now(), updated_at: now(), ...extra });
+  const d = groupDefaults(db, groupId);
+  const section = extra.section_id && db.prepare('SELECT store_id FROM store_sections WHERE id = ?').get(extra.section_id);
+  return insert('products', {
+    id: newId(), name, unit, group_id: groupId, created_at: now(), updated_at: now(),
+    store_id: section?.store_id ?? d.storeId, section_id: d.sectionId, fallback_store_id: section ? null : d.fallbackStoreId,
+    storage_location_id: d.storageLocationId, ...extra,
+  });
 }
 
 beforeEach(() => {
@@ -225,6 +233,21 @@ test('Laden: Warengruppe, Ausweichladen, feste Ausnahme', () => {
   setTripItem(db, t.id, ids.hack, 'now', { useFallback: true });
   list = buildTripList(db, t);
   assert.deepEqual([line(list, 'Hackleisch').store.name, line(list, 'Hackleisch').section.name], ['We', 'Rest'], 'gibt\'s hier nicht → We');
+});
+
+test('Orte pro Produkt: Vorschlag aus der Warengruppe beim Anlegen, danach gilt nur das Produkt', () => {
+  const gemuese = db.prepare("SELECT id FROM product_groups WHERE name = 'Gemüse'").pluck().get();
+  const created = saveProduct(db, { name: 'Ckerl', unit: 'Stück', groupId: gemuese });
+  assert.equal(created.storeId, ids.markt, 'Vorschlag: Laden der Warengruppe');
+  assert.equal(created.fallbackStoreId, ids.we);
+  assert.ok(created.sectionId && created.storageLocationId);
+  // gleiche Warengruppe, anderer Laden (wie Frischkäse ≠ Käse)
+  const moved = saveProduct(db, { storeId: ids.we, sectionId: ids.weRest, fallbackStoreId: null }, created.id);
+  assert.equal(moved.groupId, gemuese);
+  meal('2026-10-14', saveDish(db, { name: 'Ckerlsalat', ingredients: [{ productName: 'Ckerl', amount: 1, unit: 'Stück' }] }).dish);
+  const item = line(buildTripList(db, trip(), '2026-10-14'), 'Ckerl');
+  assert.deepEqual([item.store.name, item.section.name, item.hasFallback], ['We', 'Rest', false]);
+  assert.throws(() => saveProduct(db, { storeId: ids.markt, sectionId: ids.weRest }, created.id), /gehört nicht zu diesem Laden/);
 });
 
 test('Haltbarkeit: späterer Anteil wird getrennt und mit Datum ausgewiesen', () => {
