@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deployt den Branch dev auf die Dev-Instanz (schompf-dev.michoest.com):
 # API aus ~/dev/schompf-dev (PM2 schompf-dev-api, Port 3010), Frontend nach /srv/schompf-dev.
-# Mit --refresh-db wird vorher die Live-Datenbank in die Dev-Instanz kopiert.
+# Mit --refresh-db wird vorher die Live-Datenbank in die Dev-Instanz kopiert (Dev-Logins und Push-Abos bleiben).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -24,12 +24,13 @@ npm ci --omit=dev --no-audit --no-fund
 # Schlüssel für Benachrichtigungen einmalig erzeugen (bleiben in .env, nicht im Git)
 grep -q '^VAPID_PUBLIC_KEY=' .env || { node scripts/schompf.js vapid >> .env && echo "VAPID-Schlüssel erzeugt"; }
 if [ "$REFRESH_DB" = "--refresh-db" ] || [ ! -f data/schompf.db ]; then
-  pm2 stop schompf-dev-api >/dev/null 2>&1 || true
-  cp ~/dev/schompf-1/api/data/db.json data/db.json
+  # konsistente Kopie der Live-SQLite (läuft auch, während die Live-API schreibt)
+  (cd ~/dev/schompf-1/api && node scripts/backup.js /tmp/schompf-live.db)
   KEEP=""
   if [ -f data/schompf.db ]; then node scripts/backup.js data/schompf.prev.db && KEEP="--keep-auth data/schompf.prev.db"; fi
-  node scripts/migrate-from-json.js --force $KEEP | grep -v '^ *"' | grep -v '^[{}]'
-  echo "Dev-DB frisch aus Live-Daten übernommen"
+  pm2 stop schompf-dev-api >/dev/null 2>&1 || true
+  node scripts/refresh-from-live.js /tmp/schompf-live.db $KEEP
+  rm -f /tmp/schompf-live.db
 fi
 pm2 startOrRestart ecosystem.dev.config.cjs --update-env
 pm2 save >/dev/null

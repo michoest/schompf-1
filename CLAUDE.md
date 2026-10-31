@@ -41,7 +41,7 @@ Schema in `api/src/db/migrations/NNN_*.sql`, Stand in `PRAGMA user_version`. **�
 
 ## Deploy
 
-Gearbeitet wird auf `dev`; `main` = Produktion. `npm run deploy:dev` deployt `dev` auf die Dev-Instanz (`-- --refresh-db` nur bewusst: verwirft Dev-Einkäufe/-Planung, behält Logins/Abos/Anmerkungen).
+Gearbeitet wird auf `dev`; `main` = Produktion. `npm run deploy:dev` deployt `dev` auf die Dev-Instanz (`-- --refresh-db` nur bewusst: ersetzt alle Dev-Daten durch eine Kopie der Live-DB, behält nur Dev-Logins/Push-Abos).
 Release: `dev` per fast-forward nach `main`, dann Backend und Frontend direkt nacheinander (Frontend und API müssen zusammenpassen).
 
 1. Backend (bei API-Änderungen zuerst): pushen, dann `npm run deploy:api`.
