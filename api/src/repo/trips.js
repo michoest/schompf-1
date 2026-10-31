@@ -475,12 +475,11 @@ export function collectNeeds(db, { from = null, to = null, mealIds = null } = {}
 export function buildTripList(db, trip, today = todayLocal()) {
   ensureSnapshot(db, trip);
   const products = new Map(db.prepare(`
-    SELECT p.id, p.name, p.unit, p.is_staple, p.shelf_life_days, p.section_id, p.group_id,
-           g.name AS group_name, g.preferred_store_id, g.fallback_store_id, g.storage_location_id, g.sort AS group_sort,
-           sl.name AS storage_name, sl.sort AS storage_sort
+    SELECT p.id, p.name, p.unit, p.is_staple, p.shelf_life_days, p.group_id, p.store_id, p.section_id, p.fallback_store_id,
+           p.storage_location_id, g.name AS group_name, g.sort AS group_sort, sl.name AS storage_name, sl.sort AS storage_sort
     FROM products p
     LEFT JOIN product_groups g ON g.id = p.group_id
-    LEFT JOIN storage_locations sl ON sl.id = g.storage_location_id`).all().map(p => [p.id, p]));
+    LEFT JOIN storage_locations sl ON sl.id = p.storage_location_id`).all().map(p => [p.id, p]));
   const stores = new Map(db.prepare('SELECT id, name, color, sort FROM stores').all().map(s => [s.id, s]));
   const sections = new Map(db.prepare('SELECT id, store_id, name, sort FROM store_sections').all().map(s => [s.id, s]));
   const sectionFor = db.prepare('SELECT section_id FROM section_groups WHERE store_id = ? AND group_id = ?').pluck();
@@ -525,15 +524,12 @@ export function buildTripList(db, trip, today = todayLocal()) {
   const items = [...lines.values()].map(line => {
     const product = products.get(line.productId);
     const ti = interventions.get(line.key);
-    const useFallback = !!ti?.use_fallback && !!product.fallback_store_id && !product.section_id;
-    let storeId = null, sectionId = null;
-    if (product.section_id) {
-      sectionId = product.section_id;
-      storeId = sections.get(sectionId)?.store_id ?? null;
-    } else if (product.group_id) {
-      storeId = useFallback ? product.fallback_store_id : product.preferred_store_id;
-      sectionId = storeId ? sectionFor.get(storeId, product.group_id) ?? null : null;
-    }
+    // Laden und Abschnitt stehen am Produkt; „gibt's hier nicht“ → Ausweichladen (Abschnitt dort nach Warengruppe)
+    const useFallback = !!ti?.use_fallback && !!product.fallback_store_id;
+    const storeId = useFallback ? product.fallback_store_id : product.store_id;
+    const sectionId = useFallback
+      ? (product.group_id ? sectionFor.get(storeId, product.group_id) ?? null : null)
+      : product.section_id;
     const store = stores.get(storeId);
     const section = sections.get(sectionId);
     const summed = sumAmounts(line.sources.map(s => ({ amount: s.amount, unit: s.unit })));
@@ -550,8 +546,10 @@ export function buildTripList(db, trip, today = todayLocal()) {
       isStaple: !!product.is_staple,
       store: store ? { id: store.id, name: store.name, color: store.color, sort: store.sort } : null,
       section: section ? { id: section.id, name: section.name, sort: section.sort } : null,
-      hasFallback: !!product.fallback_store_id && !product.section_id,
+      hasFallback: !!product.fallback_store_id,
       useFallback,
+      preferredStoreName: stores.get(product.store_id)?.name ?? null,
+      fallbackStoreName: stores.get(product.fallback_store_id)?.name ?? null,
       needed,
       override,
       display: override ? formatAmount(override.amount, override.unit) : needed.map(n => formatAmount(n.amount, n.unit)).join(' + '),

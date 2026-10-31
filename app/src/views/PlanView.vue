@@ -110,6 +110,14 @@ function openMeal(meal) {
 function earlier() { from.value = addDays(from.value, -7); load() }
 function later() { to.value = addDays(to.value, 7); load() }
 
+// klare Symbole statt langer Namen (Name als Tooltip und im leeren Feld)
+const SLOT_ICONS = {
+  early: 'mdi-weather-sunset-up', breakfast: 'mdi-coffee-outline', 'snack-morning': 'mdi-food-apple-outline',
+  lunch: 'mdi-white-balance-sunny', 'snack-afternoon': 'mdi-cookie-outline', dinner: 'mdi-weather-night', 'snack-evening': 'mdi-popcorn',
+}
+const slotIcon = slotId => SLOT_ICONS[slotId] ?? 'mdi-silverware-variant'
+const slotName = slotId => data.slots.find(s => s.id === slotId)?.name ?? ''
+
 function mealLabel(m) {
   if (m.kind === 'dish') return m.dishName
   if (m.kind === 'leftovers') return m.text ? `Reste: ${m.text}` : 'Reste'
@@ -150,8 +158,9 @@ onMounted(async () => {
         <v-icon v-if="inTrip(date)" icon="mdi-cart-check" size="small" color="primary" title="Gerichte auf der Einkaufsliste" />
       </div>
       <div v-for="row in rowsFor(date)" :key="row.key" class="slot-row">
-        <div class="slot-name">{{ row.name }}</div>
+        <div class="slot-icon" :title="row.name"><v-icon :icon="slotIcon(row.slotId)" size="20" /></div>
         <div class="slot-meals">
+          <div v-if="row.label" class="row-label">{{ row.label }}</div>
           <div v-for="m in row.meals" :key="m.id" class="meal" :class="{ prepared: m.status === 'prepared', other: m.kind !== 'dish' }" @click="openMeal(m)">
             <v-icon v-if="m.status === 'prepared'" icon="mdi-check-circle" size="16" color="primary" class="mr-1" title="zubereitet" />
             <span class="meal-name">{{ mealLabel(m) }}</span>
@@ -160,10 +169,12 @@ onMounted(async () => {
             <span v-if="m.kind === 'dish' && m.dishKind !== 'takeaway'" class="servings">{{ formatNumber(m.servings) }} P.</span>
           </div>
           <div v-if="!row.meals.length" class="meal empty" @click="addMeal(date, row.slotId, row.label)">
-            <v-icon icon="mdi-plus" size="16" class="mr-1" />eintragen
+            <v-icon icon="mdi-plus" size="16" class="mr-1" />{{ row.label ?? slotName(row.slotId) }}
           </div>
         </div>
-        <v-btn v-if="row.meals.length" icon="mdi-plus" size="x-small" variant="text" class="add-btn" :aria-label="`${row.name} hinzufügen`" @click="addMeal(date, row.slotId, row.label)" />
+        <div class="slot-add">
+          <v-btn v-if="row.meals.length" icon="mdi-plus" size="x-small" variant="text" class="add-btn" :aria-label="`${row.name} hinzufügen`" @click="addMeal(date, row.slotId, row.label)" />
+        </div>
       </div>
       <div class="px-2 pb-2">
         <v-menu>
@@ -207,9 +218,13 @@ onMounted(async () => {
 .trip-banner { background: linear-gradient(120deg, rgba(37, 99, 235, 0.10), rgba(79, 70, 229, 0.10)); box-shadow: none !important; }
 .day.today { border-left: 4px solid rgb(var(--v-theme-primary)); }
 .day.past { opacity: 0.7; }
-.slot-row { display: grid; grid-template-columns: 92px 1fr 28px; align-items: start; padding: 0 8px 0 16px; }
+.slot-row { display: grid; grid-template-columns: 36px 1fr 32px; align-items: start; padding: 0 8px 0 14px; }
 .slot-row + .slot-row { border-top: 1px solid rgba(var(--v-theme-on-surface), 0.05); }
-.slot-name { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(var(--v-theme-on-surface), 0.45); padding-top: 11px; }
+/* Symbol und Plus auf der Mittellinie der ersten Mahlzeit: 3px Abstand + 32px Zeile */
+.slot-icon, .slot-add { height: 38px; display: flex; align-items: center; }
+.slot-icon { color: rgba(var(--v-theme-on-surface), 0.4); }
+.slot-add { justify-content: flex-end; }
+.row-label { font-size: 0.72rem; color: rgba(var(--v-theme-on-surface), 0.5); padding: 4px 0 0; }
 .slot-meals { min-width: 0; padding: 3px 0; }
 .meal { display: flex; align-items: center; padding: 5px 6px; margin-left: -6px; cursor: pointer; border-radius: 8px; min-height: 32px; }
 .meal:hover { background: rgba(var(--v-theme-primary), 0.05); }
@@ -218,5 +233,5 @@ onMounted(async () => {
 .meal.other .meal-name { font-style: italic; font-weight: 400; }
 .meal.empty { color: rgba(var(--v-theme-on-surface), 0.35); font-size: 0.875rem; }
 .servings { margin-left: 12px; white-space: nowrap; font-size: 0.8rem; color: rgba(var(--v-theme-on-surface), 0.45); }
-.add-btn { margin-top: 4px; color: rgba(var(--v-theme-on-surface), 0.4); }
+.add-btn { color: rgba(var(--v-theme-on-surface), 0.4); }
 </style>
