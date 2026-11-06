@@ -33,6 +33,7 @@ function toDocument(db, row) {
     status: row.status,
     servings: row.servings,
     totalMinutes: row.total_minutes,
+    extraPercent: row.extra_percent ?? null,
     sourceUrl: row.source_url,
     takeawayWhere: row.takeaway_where,
     recipe: row.recipe,
@@ -69,11 +70,11 @@ export function saveDish(db, input, ctx = {}) {
 
     if (before) {
       db.prepare(`UPDATE dishes SET name=@name, kind=@kind, status=@status, servings=@servings, source_url=@sourceUrl,
-                  takeaway_where=@takeawayWhere, recipe=@recipe, total_minutes=@totalMinutes, updated_at=@updatedAt WHERE id=@id`)
+                  takeaway_where=@takeawayWhere, recipe=@recipe, total_minutes=@totalMinutes, extra_percent=@extraPercent, updated_at=@updatedAt WHERE id=@id`)
         .run({ ...doc, id, updatedAt: timestamp });
     } else {
-      db.prepare(`INSERT INTO dishes (id, name, kind, status, servings, source_url, takeaway_where, recipe, total_minutes, created_at, updated_at)
-                  VALUES (@id, @name, @kind, @status, @servings, @sourceUrl, @takeawayWhere, @recipe, @totalMinutes, @at, @at)`)
+      db.prepare(`INSERT INTO dishes (id, name, kind, status, servings, source_url, takeaway_where, recipe, total_minutes, extra_percent, created_at, updated_at)
+                  VALUES (@id, @name, @kind, @status, @servings, @sourceUrl, @takeawayWhere, @recipe, @totalMinutes, @extraPercent, @at, @at)`)
         .run({ ...doc, id, at: timestamp });
     }
 
@@ -153,6 +154,10 @@ function validate(db, input, before, ctx) {
   const minutesRaw = 'totalMinutes' in input ? input.totalMinutes : before?.totalMinutes ?? null;
   const totalMinutes = minutesRaw == null || minutesRaw === '' ? null : Number(minutesRaw);
   if (totalMinutes != null && !(Number.isInteger(totalMinutes) && totalMinutes > 0)) errors.push('Zubereitungszeit muss eine ganze Zahl Minuten sein');
+  // Zuschlag beim Einkaufen (z.B. Naschteig), in Prozent
+  const extraRaw = 'extraPercent' in input ? input.extraPercent : before?.extraPercent ?? null;
+  const extraPercent = extraRaw == null || extraRaw === '' || Number(extraRaw) === 0 ? null : Number(extraRaw);
+  if (extraPercent != null && !(Number.isInteger(extraPercent) && extraPercent > 0 && extraPercent <= 100)) errors.push('Zuschlag muss eine ganze Zahl von 1 bis 100 % sein');
 
   const ingredients = (input.ingredients ?? before?.ingredients ?? []).map((ing, i) => {
     const product = resolveProduct(db, ing, ctx);
@@ -190,7 +195,7 @@ function validate(db, input, before, ctx) {
 
   if (errors.length) throw new ValidationError(errors);
   return {
-    name, kind, status, servings, totalMinutes,
+    name, kind, status, servings, totalMinutes, extraPercent,
     sourceUrl: pick(input, before, 'sourceUrl'),
     takeawayWhere: pick(input, before, 'takeawayWhere'),
     recipe,
@@ -244,7 +249,7 @@ function resolveProduct(db, ing, ctx) {
 /** Menschlich lesbare Zusammenfassung, z.B. „Reis: 250 g → 200 g; + Silie“. */
 export function describeChanges(before, after) {
   const parts = [];
-  const fields = [['name', 'Name'], ['kind', 'Art'], ['status', 'Status'], ['servings', 'Portionen'], ['totalMinutes', 'Zeit (Min.)'], ['sourceUrl', 'Quelle'], ['takeawayWhere', 'Wo']];
+  const fields = [['name', 'Name'], ['kind', 'Art'], ['status', 'Status'], ['servings', 'Portionen'], ['totalMinutes', 'Zeit (Min.)'], ['extraPercent', 'Zuschlag (%)'], ['sourceUrl', 'Quelle'], ['takeawayWhere', 'Wo']];
   for (const [field, label] of fields) {
     if ((before[field] ?? null) !== (after[field] ?? null)) parts.push(`${label}: ${before[field] ?? '–'} → ${after[field] ?? '–'}`);
   }
