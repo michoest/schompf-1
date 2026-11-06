@@ -4,7 +4,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import { listMeals, saveMeal } from './repo/meals.js';
 import { getDish, listDishes, ValidationError } from './repo/dishes.js';
-import { ensureCurrentTrip, buildTripList, toFreeItem } from './repo/trips.js';
+import { ensureCurrentTrip, buildTripList, toFreeItem, deleteFreeItem, getCurrentTrip } from './repo/trips.js';
 import { addInboxItems } from './repo/inbox.js';
 import { addFeedback, listFeedback } from './repo/feedback.js';
 import { dishToFile } from './domain/dishFile.js';
@@ -17,9 +17,11 @@ import { addDays, todayLocal } from './domain/dates.js';
 const INSTRUCTIONS = `Schompf ist die Mahlzeitenplanungs- und Einkaufs-App von Roßes und Leines (zwei Personen, ein Haushalt).
 - Produkt- und Gerichtnamen sind auf „Schatzisch“: Wortanfang weg, Mehrzahl -s, Adjektive -es (Trone = Zitrone, Ghetti = Spaghetti, We = Rewe).
   Namen immer so verwenden, wie Schompf sie liefert; bei der Suche hilft search_dishes.
-- Mahlzeiten liegen in Slots pro Tag (Frühstück, Mittagessen, Abendessen, Snacks). Ein Einkauf deckt einen Zeitraum ab;
-  seine Liste ist eingefroren und ändert sich nur ausdrücklich (in der App „Liste anpassen“, hier add_to_shopping).
-- Merklisten: Artikel „bei Gelegenheit“, an einen Laden gebunden, wenn gerade kein Einkauf offen ist.
+- Mahlzeiten liegen in Slots pro Tag (Frühstück, Mittagessen, Abendessen, Snacks).
+- Es gibt immer genau eine Einkaufsliste (durchgehend: Einträge bleiben, bis sie gekauft sind). Gerichte kommen nur ausdrücklich
+  drauf (in der App „Aus Plan holen“); hier lassen sich Artikel hinzufügen (add_to_shopping) und wieder entfernen (remove_from_shopping).
+- Merklisten: Artikel „bei Gelegenheit“, an einen Laden gebunden (nur in der App angelegt).
+- Für einen schnellen Überblick (Läden, Liste, heute/morgen) reicht get_context.
 - Datumsangaben YYYY-MM-DD, Zeitzone Europe/Berlin.`;
 
 const DAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
@@ -76,9 +78,44 @@ export function buildMcpServer({ db, person, changed = () => {}, planNotifier = 
   const server = new McpServer({ name: 'schompf', version: '1.0.0' }, { instructions: INSTRUCTIONS });
   const slots = () => new Map(db.prepare('SELECT id, name FROM meal_slots ORDER BY sort').all().map(s => [s.id, s.name]));
 
+  const READ_ONLY = { readOnlyHint: true, openWorldHint: false };
+
+  server.registerTool('get_context', {
+    description: 'Kompakter Überblick für die Entscheidung, ob und wie Schompf zuständig ist: Läden, Stand der Einkaufsliste, Mahlzeiten heute und morgen.',
+    inputSchema: {},
+    annotations: READ_ONLY,
+  }, guarded(async () => {
+    const today = todayLocal();
+    const tomorrow = addDays(today, 1);
+    const names = slots();
+    const meals = listMeals(db, { from: today, to: tomorrow });
+    const mealsOn = date => meals.filter(m => m.date === date).map(m => `${names.get(m.slotId) ?? m.slotId}: ${presentMeal(m, names).title}${m.status === 'prepared' ? ' (zubereitet)' : ''}`);
+    const trip = getCurrentTrip(db);
+    let shopping = { open: 0, in_cart: 0, extra: 0 };
+    if (trip) {
+      const built = buildTripList(db, trip);
+      shopping = {
+        open: built.items.filter(i => i.state === 'open' && i.part === 'now').length,
+        in_cart: built.items.filter(i => i.state === 'in_cart').length + built.freeItems.filter(f => f.state === 'in_cart').length,
+        extra: built.freeItems.filter(f => f.state === 'open').length,
+        ...(trip.coversTo >= today ? { dishes_until: trip.coversTo } : {}),
+      };
+    }
+    const notes = db.prepare(`SELECT s.name, COUNT(*) n FROM free_items f JOIN stores s ON s.id = f.store_id
+                              WHERE f.trip_id IS NULL AND f.state = 'open' GROUP BY s.id ORDER BY s.sort`).all();
+    return json({
+      today: `${weekday(today)} ${today}`,
+      stores: db.prepare('SELECT name FROM stores ORDER BY sort').pluck().all(),
+      shopping,
+      ...(notes.length ? { notes_by_store: Object.fromEntries(notes.map(n => [n.name, n.n])) } : {}),
+      meals: { today: mealsOn(today), tomorrow: mealsOn(tomorrow) },
+    });
+  }));
+
   server.registerTool('list_plan', {
     description: 'Geplante Mahlzeiten im Zeitraum, nach Tag gruppiert („Was essen wir nächste Woche?“). Standard: heute bis in 6 Tagen.',
     inputSchema: { from: DATE.optional(), to: DATE.optional() },
+    annotations: READ_ONLY,
   }, guarded(async ({ from, to }) => {
     const today = todayLocal();
     from ??= today;
@@ -102,6 +139,7 @@ export function buildMcpServer({ db, person, changed = () => {}, planNotifier = 
       max_minutes: z.number().int().positive().optional().describe('Höchstens so viele Minuten Gesamtzeit'),
       include_drafts: z.boolean().default(false).describe('Auch Entwürfe zeigen'),
     },
+    annotations: READ_ONLY,
   }, guarded(async ({ query, max_minutes, include_drafts }) => {
     const q = query?.trim().toLowerCase();
     const dishes = listDishes(db)
@@ -122,6 +160,7 @@ export function buildMcpServer({ db, person, changed = () => {}, planNotifier = 
   server.registerTool('get_dish', {
     description: 'Ein Gericht vollständig: Zutaten (Mengen pro Portion), Beilagen, Vorbereitungen und Rezept, im Schompf-Dateiformat (YAML-Kopf + Rezept).',
     inputSchema: { name: z.string().min(1) },
+    annotations: READ_ONLY,
   }, guarded(async ({ name }) => {
     const dish = findDish(db, name);
     if (!dish) return dishNotFound(db, name);
@@ -133,8 +172,9 @@ export function buildMcpServer({ db, person, changed = () => {}, planNotifier = 
   }));
 
   server.registerTool('get_shopping', {
-    description: 'Die Einkaufsliste (durchgehend: Einträge bleiben, bis sie gekauft sind; nach Laden und Abschnitt, mit Status) und die Merklisten der Läden.',
+    description: 'Die Einkaufsliste ausführlich (nach Laden und Abschnitt, mit Status) und die Merklisten der Läden. Für einen Überblick reicht get_context.',
     inputSchema: {},
+    annotations: READ_ONLY,
   }, guarded(async () => {
     const stores = new Map(db.prepare('SELECT id, name FROM stores').all().map(s => [s.id, s.name]));
     const trip = ensureCurrentTrip(db);
@@ -169,7 +209,7 @@ export function buildMcpServer({ db, person, changed = () => {}, planNotifier = 
 
   server.registerTool('add_to_shopping', {
     description: 'Artikel auf die Einkaufsliste setzen, wie in der Schnellzeile der App getippt („2 l Milch“, „Waschmittel“). '
-      + 'Ziel bestimmt Schompf: offener Einkauf, sonst Merkliste des passenden Ladens. Nur auf ausdrücklichen Wunsch verwenden.',
+      + 'Nur auf ausdrücklichen Wunsch verwenden. Das Ergebnis nennt pro Artikel id und Ziel – damit lässt er sich mit remove_from_shopping zurücknehmen.',
     inputSchema: {
       items: z.array(z.string().min(1).max(200)).min(1).max(50),
     },
@@ -178,7 +218,34 @@ export function buildMcpServer({ db, person, changed = () => {}, planNotifier = 
     if (results.some(r => r.status === 'created')) changed('free-items');
     return json(results.map(r => r.status === 'error'
       ? { text: items[results.indexOf(r)], error: r.message }
-      : { text: r.text, ...(r.amount != null ? { amount: r.amount, unit: r.unit } : {}), added_to: r.target.label }));
+      : { id: r.freeItemId, text: r.text, ...(r.amount != null ? { amount: r.amount, unit: r.unit } : {}), added_to: r.target.label }));
+  }));
+
+  server.registerTool('remove_from_shopping', {
+    description: 'Einen von Hand hinzugefügten Artikel wieder entfernen (Einkaufsliste oder Merkliste) – z.B. um add_to_shopping zurückzunehmen. '
+      + 'Am genauesten mit der id aus add_to_shopping; sonst per Name (genauer Text, bei mehreren der zuletzt hinzugefügte). '
+      + 'Zutaten aus dem Plan lassen sich hier nicht entfernen.',
+    inputSchema: {
+      id: z.string().min(8).optional().describe('id aus add_to_shopping (Anfang genügt, mind. 8 Zeichen)'),
+      name: z.string().min(1).optional().describe('Artikeltext, wie er auf der Liste steht'),
+    },
+    annotations: { destructiveHint: true, idempotentHint: false, openWorldHint: false },
+  }, guarded(async ({ id, name }) => {
+    if (!id === !name) return fail('Entweder id oder name angeben.');
+    // nur offene, von Hand angelegte Einträge der aktuellen Liste oder einer Merkliste
+    const trip = getCurrentTrip(db);
+    const candidates = db.prepare(`SELECT f.*, s.name AS store_name FROM free_items f LEFT JOIN stores s ON s.id = f.store_id
+                                   WHERE f.state = 'open' AND (f.trip_id = ? OR f.trip_id IS NULL) ORDER BY f.created_at DESC`).all(trip?.id ?? '');
+    const hit = id
+      ? candidates.find(f => f.id.startsWith(id))
+      : candidates.find(f => f.text.toLowerCase() === name.trim().toLowerCase());
+    if (!hit) {
+      const open = candidates.map(f => f.text).slice(0, 20);
+      return fail(`${id ? `Eintrag ${id}` : `„${name}“`} steht nicht (offen) auf der Liste.${open.length ? ` Von Hand hinzugefügt: ${open.join(', ')}` : ''}`);
+    }
+    deleteFreeItem(db, hit.id);
+    changed('free-items');
+    return json({ removed: { id: hit.id, text: hit.text, from: hit.trip_id ? 'Einkaufsliste' : `Merkliste ${hit.store_name}` } });
   }));
 
   server.registerTool('plan_meal', {
@@ -216,6 +283,7 @@ export function buildMcpServer({ db, person, changed = () => {}, planNotifier = 
   server.registerTool('list_feedback', {
     description: 'Anmerkungen der Nutzer zu Gerichten oder zur App. Standard: nur offene.',
     inputSchema: { status: z.enum(['open', 'done', 'all']).default('open') },
+    annotations: READ_ONLY,
   }, guarded(async ({ status }) => json(listFeedback(db, { status: status === 'all' ? null : status }).map(f => ({
     id: f.id.slice(0, 8), ...(f.dishName ? { dish: f.dishName } : {}), by: f.person, text: f.text, status: f.status,
     ...(f.resolution ? { resolution: f.resolution } : {}), at: f.createdAt.slice(0, 10),

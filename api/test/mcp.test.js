@@ -41,7 +41,9 @@ test('ohne Token kein Zugriff', async () => {
 test('Tools sind da', async () => {
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map(t => t.name).sort(),
-    ['add_feedback', 'add_to_shopping', 'get_dish', 'get_shopping', 'list_feedback', 'list_plan', 'plan_meal', 'search_dishes']);
+    ['add_feedback', 'add_to_shopping', 'get_context', 'get_dish', 'get_shopping', 'list_feedback', 'list_plan', 'plan_meal', 'remove_from_shopping', 'search_dishes']);
+  const readOnly = tools.filter(t => t.annotations?.readOnlyHint).map(t => t.name).sort();
+  assert.deepEqual(readOnly, ['get_context', 'get_dish', 'get_shopping', 'list_feedback', 'list_plan', 'search_dishes']);
 });
 
 test('Gericht suchen, lesen, planen – Plan zeigt es, Liste bleibt unverändert', async () => {
@@ -72,6 +74,25 @@ test('Einkauf: Artikel hinzufügen landet im aktuellen Einkauf', async () => {
   const shopping = (await call('get_shopping')).data;
   assert.ok(shopping.trip);
   assert.deepEqual(shopping.trip.extra.map(i => i.text), ['Milch']);
+});
+
+test('Hinzufügen zurücknehmen: per id oder Name; Kontext bleibt klein', async () => {
+  const [mehl] = (await call('add_to_shopping', { items: ['Mehl'] })).data;
+  assert.ok(mehl.id);
+  const context = await call('get_context');
+  assert.ok(context.content[0].text.length < 1024, `Kontext ${context.content[0].text.length} Zeichen`);
+  assert.deepEqual(context.data.stores, ['We']);
+  assert.ok(context.data.shopping.extra >= 1);
+
+  const removed = (await call('remove_from_shopping', { id: mehl.id.slice(0, 8) })).data;
+  assert.deepEqual(removed.removed, { id: mehl.id, text: 'Mehl', from: 'Einkaufsliste' });
+  assert.ok((await call('remove_from_shopping', { id: mehl.id })).isError, 'schon weg');
+
+  await call('add_to_shopping', { items: ['Hefe'] });
+  assert.equal((await call('remove_from_shopping', { name: 'hefe' })).data.removed.text, 'Hefe');
+  const missing = await call('remove_from_shopping', { name: 'Gibtsnicht' });
+  assert.ok(missing.isError);
+  assert.match(missing.content[0].text, /Von Hand hinzugefügt: .*Milch/);
 });
 
 test('Anmerkungen schreiben und lesen', async () => {
