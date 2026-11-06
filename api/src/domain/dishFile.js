@@ -39,6 +39,7 @@ export function dishToFile(dish) {
     portionen: dish.servings,
   };
   if (dish.totalMinutes) head.zeit = dish.totalMinutes;
+  if (dish.extraPercent) head.zuschlag = dish.extraPercent;
   if (dish.categories.length) head.kategorien = dish.categories;
   if (dish.sourceUrl) head.quelle = dish.sourceUrl;
   if (dish.takeawayWhere) head.wo = dish.takeawayWhere;
@@ -90,6 +91,7 @@ export function fileToDish(text) {
     kind, status,
     servings: head.portionen,
     ...('zeit' in head ? { totalMinutes: head.zeit } : {}),
+    ...('zuschlag' in head ? { extraPercent: head.zuschlag } : {}),
     categories: (head.kategorien ?? []).map(String),
     sourceUrl: head.quelle ?? null,
     takeawayWhere: head.wo ?? null,

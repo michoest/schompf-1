@@ -89,6 +89,7 @@ function closeOpenTrips(db, next) {
   const moveSource = db.prepare('UPDATE trip_sources SET trip_id = ? WHERE id = ?');
   const moveMeal = db.prepare('UPDATE meals SET trip_id = ? WHERE id = ? AND trip_id = ?');
   const moveFree = db.prepare('UPDATE free_items SET trip_id = ? WHERE id = ?');
+  // Menge, Zustand und „gibt's hier nicht“ wandern mit; „heute woanders“ (store_id/section_id) gilt nur für diese Runde
   const copyItem = db.prepare(`INSERT OR REPLACE INTO trip_items (trip_id, product_id, part, state, amount, unit, use_fallback, updated_by, updated_at)
                                SELECT ?, product_id, part, state, amount, unit, use_fallback, updated_by, updated_at
                                FROM trip_items WHERE trip_id = ? AND product_id = ? AND part = ?`);
@@ -369,13 +370,26 @@ export function setTripItem(db, tripId, productId, part, input, personId = null)
     unit = null;
   }
   const useFallback = 'useFallback' in input ? (input.useFallback ? 1 : 0) : before?.use_fallback ?? 0;
+  // „Heute woanders kaufen“: nur für diesen Einkauf; storeId null = zurück an den normalen Platz
+  const place = 'storeId' in input ? checkPlace(db, input.storeId, input.sectionId, errors)
+    : { storeId: before?.store_id ?? null, sectionId: before?.section_id ?? null };
   if (errors.length) throw new ValidationError(errors);
-  db.prepare(`INSERT INTO trip_items (trip_id, product_id, part, state, amount, unit, use_fallback, updated_by, updated_at)
-              VALUES (@tripId, @productId, @part, @state, @amount, @unit, @useFallback, @personId, @at)
+  db.prepare(`INSERT INTO trip_items (trip_id, product_id, part, state, amount, unit, use_fallback, store_id, section_id, updated_by, updated_at)
+              VALUES (@tripId, @productId, @part, @state, @amount, @unit, @useFallback, @storeId, @sectionId, @personId, @at)
               ON CONFLICT (trip_id, product_id, part) DO UPDATE SET state = @state, amount = @amount, unit = @unit,
-                use_fallback = @useFallback, updated_by = @personId, updated_at = @at`)
-    .run({ tripId, productId, part, state, amount, unit, useFallback, personId, at: now() });
-  return { productId, part, state, amount, unit, useFallback: !!useFallback };
+                use_fallback = @useFallback, store_id = @storeId, section_id = @sectionId, updated_by = @personId, updated_at = @at`)
+    .run({ tripId, productId, part, state, amount, unit, useFallback, ...place, personId, at: now() });
+  return { productId, part, state, amount, unit, useFallback: !!useFallback, ...place };
+}
+
+/** Laden + Abschnitt prüfen (Abschnitt muss zum Laden gehören); ohne Laden beides leer. */
+function checkPlace(db, storeId, sectionId, errors) {
+  if (!storeId) return { storeId: null, sectionId: null };
+  if (!db.prepare('SELECT 1 FROM stores WHERE id = ?').get(storeId)) errors.push('Laden unbekannt');
+  if (sectionId && db.prepare('SELECT store_id FROM store_sections WHERE id = ?').pluck().get(sectionId) !== storeId) {
+    errors.push('Abschnitt gehört nicht zu diesem Laden');
+  }
+  return { storeId, sectionId: sectionId || null };
 }
 
 // Freie Artikel ---------------------------------------------------------------
@@ -407,9 +421,14 @@ export function updateFreeItem(db, id, input) {
   const item = db.prepare('SELECT * FROM free_items WHERE id = ?').get(id);
   if (!item) return null;
   const state = input.state ?? item.state;
-  if (!STATES.includes(state)) throw new ValidationError([`Zustand „${state}“ unbekannt`]);
+  const errors = [];
+  if (!STATES.includes(state)) errors.push(`Zustand „${state}“ unbekannt`);
+  // Einsortieren (nur Artikel auf der Einkaufsliste; bei Merklisten-Einträgen ist der Laden die Merkliste)
+  const place = item.trip_id && 'storeId' in input ? checkPlace(db, input.storeId, input.sectionId, errors)
+    : { storeId: item.store_id, sectionId: item.section_id };
+  if (errors.length) throw new ValidationError(errors);
   const doneAt = state === 'open' ? null : (item.done_at ?? now());
-  db.prepare('UPDATE free_items SET state = ?, done_at = ? WHERE id = ?').run(state, doneAt, id);
+  db.prepare('UPDATE free_items SET state = ?, done_at = ?, store_id = ?, section_id = ? WHERE id = ?').run(state, doneAt, place.storeId, place.sectionId, id);
   return db.prepare('SELECT * FROM free_items WHERE id = ?').get(id);
 }
 
@@ -433,6 +452,7 @@ export function collectNeeds(db, { from = null, to = null, mealIds = null } = {}
                               AND (@ids IS NULL OR m.id IN (SELECT value FROM json_each(@ids)))
                             ORDER BY m.date, s.sort, m.sort`).all({ from, to, ids: mealIds ? JSON.stringify(mealIds) : null });
   const ingredientsOf = db.prepare('SELECT id, product_id, amount, unit, optional, default_on FROM dish_ingredients WHERE dish_id = ? ORDER BY sort');
+  const extraOf = db.prepare('SELECT extra_percent FROM dishes WHERE id = ?').pluck();
   const componentsOf = db.prepare(`SELECT c.component_dish_id, c.factor, c.optional, d.name, d.kind
                                    FROM dish_components c JOIN dishes d ON d.id = c.component_dish_id WHERE c.dish_id = ? ORDER BY c.sort`);
   const chosenOf = db.prepare(`SELECT mc.component_dish_id, mc.factor, d.name, d.kind
@@ -447,10 +467,11 @@ export function collectNeeds(db, { from = null, to = null, mealIds = null } = {}
     const visit = (dishId, multiplier, viaDish, visited) => {
       if (visited.has(dishId)) return;
       const seen = new Set(visited).add(dishId);
+      const extra = 1 + (extraOf.get(dishId) ?? 0) / 100;   // Zuschlag des Gerichts (z.B. Naschteig)
       for (const ing of ingredientsOf.all(dishId)) {
         // optionale Zutaten: Auswahl der Mahlzeit, sonst Standard der Zutat
         if (ing.optional && !(choices.get(ing.id) ?? !!ing.default_on)) continue;
-        sources.push({ ...base, viaDish, productId: ing.product_id, unit: ing.unit, amount: ing.amount == null ? null : ing.amount * multiplier });
+        sources.push({ ...base, viaDish, productId: ing.product_id, unit: ing.unit, amount: ing.amount == null ? null : ing.amount * multiplier * extra });
       }
       for (const c of componentsOf.all(dishId)) {
         if (!c.optional && c.kind !== 'takeaway') visit(c.component_dish_id, multiplier * c.factor, c.name, seen);
@@ -526,9 +547,10 @@ export function buildTripList(db, trip, today = todayLocal()) {
     const ti = interventions.get(line.key);
     // Laden und Abschnitt stehen am Produkt; „gibt's hier nicht“ → Ausweichladen (Abschnitt dort nach Warengruppe)
     const useFallback = !!ti?.use_fallback && !!product.fallback_store_id;
-    const storeId = useFallback ? product.fallback_store_id : product.store_id;
-    const sectionId = useFallback
-      ? (product.group_id ? sectionFor.get(storeId, product.group_id) ?? null : null)
+    const movedToday = !!ti?.store_id;   // „heute woanders kaufen“ geht allem anderen vor
+    const storeId = movedToday ? ti.store_id : useFallback ? product.fallback_store_id : product.store_id;
+    const sectionId = movedToday ? ti.section_id
+      : useFallback ? (product.group_id ? sectionFor.get(storeId, product.group_id) ?? null : null)
       : product.section_id;
     const store = stores.get(storeId);
     const section = sections.get(sectionId);
@@ -548,6 +570,9 @@ export function buildTripList(db, trip, today = todayLocal()) {
       section: section ? { id: section.id, name: section.name, sort: section.sort } : null,
       hasFallback: !!product.fallback_store_id,
       useFallback,
+      movedToday,
+      homeStoreId: product.store_id ?? null,      // normaler Platz (für „zurück“ und Ziehen)
+      homeSectionId: product.section_id ?? null,
       preferredStoreName: stores.get(product.store_id)?.name ?? null,
       fallbackStoreName: stores.get(product.fallback_store_id)?.name ?? null,
       needed,
@@ -570,7 +595,7 @@ export function buildTripList(db, trip, today = todayLocal()) {
 
 export function toFreeItem(f) {
   return {
-    id: f.id, tripId: f.trip_id, storeId: f.store_id, productId: f.product_id, text: f.text,
+    id: f.id, tripId: f.trip_id, storeId: f.store_id, sectionId: f.section_id ?? null, productId: f.product_id, text: f.text,
     amount: f.amount, unit: f.unit, display: f.amount == null ? '' : formatAmount(f.amount, f.unit ?? 'Stück'),
     state: f.state, createdBy: f.created_by_name ?? null, createdAt: f.created_at,
   };

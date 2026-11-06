@@ -1,5 +1,6 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import Sortable from 'sortablejs'
 import api from '@/services/api'
 import { useAppStore, useDataStore } from '@/stores'
 import { useLiveStore } from '@/stores/live'
@@ -13,7 +14,8 @@ const live = useLiveStore()
 const list = ref(null)          // { trip, items, freeItems, reminders }
 const loading = ref(true)
 const tab = ref('pantry')
-const openDone = ref(new Set())   // Abschnitte, deren gekaufte Artikel aufgeklappt sind
+const openDone = ref(new Set())   // Läden, deren gekaufte Artikel aufgeklappt sind
+const storeToggle = ref(new Map()) // Läden, die von Hand auf- oder zugeklappt wurden (sonst: fertig = zu)
 const tripDialog = ref(false)
 const finishDialog = ref(false)
 
@@ -48,44 +50,56 @@ const staples = computed(() => nowItems.value.filter(i => i.isStaple && i.state 
 const missingStaples = computed(() => staples.value.filter(i => i.state === 'open').length)
 const skipped = computed(() => nowItems.value.filter(i => i.state === 'skip').sort(byName))
 
-// Einkaufen: nach Laden und Abschnitt; nur was gekauft werden muss
+// Einkaufen: nach Laden und Abschnitt (Lauf-Reihenfolge); nur was gekauft werden muss
 const toBuy = item => item.state === 'open' || item.state === 'in_cart'
+const storeInfo = id => {
+  const i = data.stores.findIndex(s => s.id === id)
+  return i < 0 ? null : { ...data.stores[i], sort: i }
+}
 const shopStores = computed(() => {
   const stores = new Map()
   const storeEntry = store => {
     const key = store?.id ?? 'none'
-    if (!stores.has(key)) stores.set(key, { id: store?.id ?? null, name: store?.name ?? 'Sonstiges', color: store?.color, sort: store?.sort ?? 99, sections: new Map(), reminders: [] })
+    if (!stores.has(key)) stores.set(key, { key, id: store?.id ?? null, name: store?.name ?? 'Ohne Laden', color: store?.color, sort: store?.sort ?? 99, sections: new Map(), reminders: [] })
     return stores.get(key)
   }
+  const sectionEntry = (store, section) => {
+    const key = section?.id ?? 'none'
+    if (!store.sections.has(key)) store.sections.set(key, { key: `${store.key}/${key}`, storeId: store.id, sectionId: section?.id ?? null, name: section?.name ?? '', sort: section?.sort ?? 99, items: [] })
+    return store.sections.get(key)
+  }
   for (const item of nowItems.value.filter(toBuy)) {
-    const store = storeEntry(item.store)
-    const key = item.section?.id ?? 'none'
-    if (!store.sections.has(key)) store.sections.set(key, { name: item.section?.name ?? '', sort: item.section?.sort ?? 99, items: [] })
-    store.sections.get(key).items.push(item)
+    sectionEntry(storeEntry(item.store ? storeInfo(item.store.id) ?? item.store : null), item.section).items.push(item)
   }
   for (const free of list.value?.freeItems ?? []) {
     if (free.state === 'have' || free.state === 'skip') continue
-    const store = storeEntry(null)
-    if (!store.sections.has('free')) store.sections.set('free', { name: 'Freie Artikel', sort: 100, items: [] })
-    store.sections.get('free').items.push({ ...free, isFree: true, name: free.text, key: free.id })
+    const store = storeInfo(free.storeId)
+    const index = store?.sections.findIndex(sec => sec.id === free.sectionId) ?? -1
+    const section = index >= 0 ? { ...store.sections[index], sort: index } : null
+    sectionEntry(storeEntry(store), section).items.push({ ...free, isFree: true, name: free.text, key: free.id })
   }
-  for (const reminder of list.value?.reminders ?? []) {
-    const store = data.stores.find(s => s.id === reminder.storeId)
-    storeEntry(store ? { ...store, sort: data.stores.indexOf(store) } : null).reminders.push(reminder)
-  }
+  for (const reminder of list.value?.reminders ?? []) storeEntry(storeInfo(reminder.storeId)).reminders.push(reminder)
+
   return [...stores.values()].sort((a, b) => a.sort - b.sort).map(store => {
-    const sections = [...store.sections.values()].sort((a, b) => a.sort - b.sort)
-      .map(s => ({ ...s, items: s.items.sort(byName) }))
-      .map(s => {
-        const key = `${store.id ?? 'none'}/${s.name}`
-        const done = s.items.filter(i => i.state === 'in_cart' && !recent.value.has(i.key))
-        return { ...s, key, done, visible: s.items.filter(i => i.state !== 'in_cart' || recent.value.has(i.key)), doneOpen: openDone.value.has(key) }
-      })
-    const open = sections.reduce((n, s) => n + s.items.filter(i => i.state !== 'in_cart').length, 0)
-      + store.reminders.filter(r => r.state === 'open').length
-    return { ...store, sections, open }
+    const sections = [...store.sections.values()].sort((a, b) => a.sort - b.sort).map(sec => ({
+      ...sec,
+      // abgehakt: noch kurz an Ort und Stelle, dann unter „im Wagen“ (nicht erst nach unten springen)
+      visible: sec.items.sort(byName).filter(i => i.state !== 'in_cart' || recent.value.has(i.key)),
+    }))
+    const all = sections.flatMap(sec => sec.items)
+    const done = all.filter(i => i.state === 'in_cart' && !recent.value.has(i.key))
+    const open = all.filter(i => i.state !== 'in_cart').length + store.reminders.filter(r => r.state === 'open').length
+    const total = all.length + store.reminders.length
+    const finished = open === 0 && total > 0
+    const collapsed = storeToggle.value.has(store.key) ? storeToggle.value.get(store.key) : finished
+    return { ...store, sections, done, open, total, finished, collapsed, doneOpen: openDone.value.has(store.key) }
   })
 })
+function toggleStore(store) {
+  const next = new Map(storeToggle.value)
+  next.set(store.key, !store.collapsed)
+  storeToggle.value = next
+}
 const openCount = computed(() => shopStores.value.reduce((n, s) => n + s.open, 0))
 const pantryOpen = computed(() => pantryGroups.value.reduce((n, g) => n + g.items.filter(i => i.state === 'open').length, 0))
 
@@ -135,6 +149,15 @@ async function setFree(item, state) {
   }
 }
 
+// Ein Laden ist fertig → automatisch zuklappen (eigene Entscheidung zurücksetzen)
+watch(() => shopStores.value.map(st => `${st.key}:${st.finished}`).join(), (now, before) => {
+  if (!before) return
+  const was = new Set(before.split(',').filter(x => x.endsWith(':true')).map(x => x.split(':')[0]))
+  const next = new Map(storeToggle.value)
+  for (const st of shopStores.value) if (st.finished && !was.has(st.key)) next.delete(st.key)
+  storeToggle.value = next
+})
+
 function toggleDone(key) {
   const next = new Set(openDone.value)
   if (next.has(key)) next.delete(key); else next.add(key)
@@ -176,6 +199,59 @@ async function deleteFree(item) {
     await load()
   } catch (e) { appStore.showError(e) }
 }
+
+// Heute woanders kaufen (Produkte, nur diese Runde) bzw. einsortieren (freie Artikel)
+const placeDialog = ref(false)
+const placeItem = ref(null)
+function openPlace(item) {
+  sheet.value = false
+  placeItem.value = item
+  placeDialog.value = true
+}
+async function moveItem(item, storeId, sectionId) {
+  placeDialog.value = false
+  try {
+    if (item.isFree) {
+      await api.updateFreeItem(item.id, { storeId, sectionId })
+    } else {
+      // zurück an den normalen Platz = Übersteuerung entfernen
+      const home = storeId === item.homeStoreId && (sectionId ?? null) === (item.homeSectionId ?? null)
+      await api.setTripItem(trip.value.id, item.productId, item.part, home ? { storeId: null } : { storeId, sectionId })
+    }
+    const store = storeInfo(storeId)
+    appStore.showSnackbar(store ? `${item.name} → ${store.name}` : `${item.name} ohne Laden`)
+    await load()
+  } catch (e) { appStore.showError(e) }
+}
+const placeLabel = (storeId, sectionId) => {
+  const store = storeInfo(storeId)
+  if (!store) return 'Ohne Laden'
+  const section = store.sections.find(sec => sec.id === sectionId)
+  return section ? `${store.name} › ${section.name}` : store.name
+}
+
+// Ziehen (lange drücken) zwischen sichtbaren Abschnitten
+const itemByKey = key => nowItems.value.find(i => i.key === key)
+  ?? (list.value?.freeItems ?? []).map(f => ({ ...f, isFree: true, name: f.text, key: f.id })).find(f => f.key === key)
+let sortables = []
+function setupDrag() {
+  sortables.forEach(x => x.destroy())
+  sortables = [...document.querySelectorAll('.einkauf .rows[data-drop]')].map(el => Sortable.create(el, {
+    // forceFallback: Zeiger-Ereignisse statt nativem Drag & Drop – zuverlässiger auf dem iPhone
+    group: 'shop', sort: false, delay: 350, delayOnTouchOnly: true, touchStartThreshold: 6, animation: 150,
+    forceFallback: true, fallbackTolerance: 4, fallbackOnBody: true, scroll: true, bubbleScroll: true,
+    draggable: '.row[data-key]', ghostClass: 'row-ghost', chosenClass: 'row-chosen',
+    onEnd(evt) {
+      // DOM gehört Vue: Element zurücklegen, dann über die Daten verschieben
+      if (evt.from !== evt.to) evt.from.insertBefore(evt.item, evt.from.children[evt.oldIndex] ?? null)
+      if (evt.from === evt.to) return
+      const item = itemByKey(evt.item.dataset.key)
+      if (item) moveItem(item, evt.to.dataset.store || null, evt.to.dataset.section || null)
+    },
+  }))
+}
+watch([shopStores, tab], () => nextTick(() => { if (tab.value === 'shopping') setupDrag() }), { flush: 'post' })
+onBeforeUnmount(() => sortables.forEach(x => x.destroy()))
 
 // Läden stehen am Produkt (Liste liefert die Namen mit)
 const fallbackName = item => item.fallbackStoreName
@@ -301,73 +377,82 @@ const sourceLabel = s => s.type === 'manual'
 
     <!-- Einkaufen -->
     <template v-else>
-      <v-card v-for="store in shopStores" :key="store.id ?? 'none'" class="mb-3 store" :style="{ borderTopColor: store.color }">
-        <v-card-title class="text-subtitle-1 d-flex align-center pb-0">
-          {{ store.name }}
-          <v-chip v-if="store.open" size="x-small" class="ml-2">{{ store.open }}</v-chip>
-          <v-icon v-else icon="mdi-check-circle" color="primary" size="small" class="ml-2" />
-        </v-card-title>
-        <template v-for="section in store.sections" :key="section.name">
-          <div v-if="section.visible.length || section.done.length" class="section-name text-caption text-medium-emphasis px-4 pt-2">{{ section.name }}</div>
-          <v-list density="compact" class="py-0">
-            <v-list-item v-for="item in section.visible" :key="item.key" :class="{ done: item.state === 'in_cart' }" @click="tapShop(item)">
-              <template #prepend>
-                <v-icon :icon="item.state === 'in_cart' ? 'mdi-checkbox-marked-circle' : 'mdi-checkbox-blank-circle-outline'" :color="item.state === 'in_cart' ? 'primary' : undefined" />
-              </template>
-              <v-list-item-title>{{ item.name }}<v-chip v-if="item.isNew" size="x-small" color="primary" variant="tonal" class="ml-2">neu</v-chip></v-list-item-title>
-              <v-list-item-subtitle v-if="item.useFallback">statt {{ preferredName(item) }}</v-list-item-subtitle>
-              <template #append>
-                <span class="text-body-2 text-medium-emphasis mr-1">{{ item.display }}</span>
-                <v-btn icon="mdi-dots-horizontal" size="small" variant="text" @click.stop="openSheet(item)" />
-              </template>
-            </v-list-item>
-          </v-list>
-          <template v-if="section.done.length">
-            <v-list v-if="section.doneOpen" density="compact" class="py-0">
-              <v-list-item v-for="item in section.done" :key="item.key" class="done" @click="tapShop(item)">
-                <template #prepend><v-icon icon="mdi-checkbox-marked-circle" color="primary" /></template>
-                <v-list-item-title>{{ item.name }}</v-list-item-title>
-                <template #append><span class="text-body-2 text-medium-emphasis">{{ item.display }}</span></template>
-              </v-list-item>
-            </v-list>
-            <v-btn variant="text" size="small" class="ml-2 text-medium-emphasis" :prepend-icon="section.doneOpen ? 'mdi-chevron-up' : 'mdi-cart-check'" @click="toggleDone(section.key)">
-              {{ section.done.length }} im Wagen
-            </v-btn>
-          </template>
-        </template>
-        <template v-if="store.reminders.length">
-          <div class="section-name text-caption text-medium-emphasis px-4 pt-2">Bei Gelegenheit</div>
-          <v-list density="compact" class="py-0">
-            <v-list-item v-for="r in store.reminders" :key="r.id" :class="{ done: r.state !== 'open' }" @click="setFree(r, r.state === 'open' ? 'in_cart' : 'open')">
-              <template #prepend><v-icon :icon="r.state === 'open' ? 'mdi-bookmark-outline' : 'mdi-bookmark-check'" :color="r.state === 'open' ? undefined : 'primary'" /></template>
-              <v-list-item-title>{{ r.text }}</v-list-item-title>
-              <template #append>
-                <span class="text-body-2 text-medium-emphasis mr-1">{{ r.display }}</span>
-                <v-btn icon="mdi-close" size="small" variant="text" @click.stop="deleteFree(r)" />
-              </template>
-            </v-list-item>
-          </v-list>
-        </template>
-        <div class="pb-2" />
-      </v-card>
+      <p class="text-caption text-medium-emphasis mb-2 px-1">Antippen = im Wagen · lange drücken und ziehen = heute woanders</p>
+      <section v-for="store in shopStores" :key="store.key" class="store-card" :class="{ finished: store.finished }">
+        <button class="store-head" @click="toggleStore(store)">
+          <span class="store-dot" :style="{ background: store.color ?? 'rgba(var(--v-theme-on-surface), 0.3)' }" />
+          <span class="store-name">{{ store.name }}</span>
+          <v-icon v-if="store.finished" icon="mdi-check-circle" color="success" size="18" class="ml-2" />
+          <v-spacer />
+          <span class="store-count">{{ store.total - store.open }}/{{ store.total }}</span>
+          <v-icon :icon="store.collapsed ? 'mdi-chevron-down' : 'mdi-chevron-up'" size="20" class="ml-1 text-medium-emphasis" />
+        </button>
+        <div class="store-progress"><div :style="{ width: `${store.total ? (100 * (store.total - store.open)) / store.total : 0}%`, background: store.color ?? 'rgb(var(--v-theme-primary))' }" /></div>
 
-      <v-card v-if="laterItems.length" class="mb-3" variant="outlined">
-        <v-card-title class="text-subtitle-1 pb-0">Später kaufen</v-card-title>
-        <v-list density="compact">
-          <v-list-item v-for="item in laterItems" :key="item.key" :class="{ done: item.state !== 'open' }" @click="tapShop(item)">
-            <template #prepend><v-icon :icon="item.state === 'in_cart' ? 'mdi-checkbox-marked-circle' : 'mdi-clock-outline'" /></template>
-            <v-list-item-title>{{ item.name }}</v-list-item-title>
-            <v-list-item-subtitle>ab {{ shortDate(item.buyFrom) }} · {{ item.store?.name }}</v-list-item-subtitle>
-            <template #append><span class="text-body-2 text-medium-emphasis">{{ item.display }}</span></template>
-          </v-list-item>
-        </v-list>
-      </v-card>
+        <div v-if="!store.collapsed" class="store-body">
+          <template v-for="section in store.sections" :key="section.key">
+            <div v-if="section.name && section.visible.length" class="section-name">{{ section.name }}</div>
+            <div class="rows" data-drop :data-store="section.storeId ?? ''" :data-section="section.sectionId ?? ''">
+              <div v-for="item in section.visible" :key="item.key" :data-key="item.key" class="row" :class="{ checked: item.state === 'in_cart' }" @click="tapShop(item)">
+                <span class="check"><v-icon :icon="item.state === 'in_cart' ? 'mdi-check-circle' : 'mdi-circle-outline'" :color="item.state === 'in_cart' ? 'primary' : undefined" size="24" /></span>
+                <div class="row-main">
+                  <div class="row-name">{{ item.name }}<span v-if="item.isNew" class="tag">neu</span></div>
+                  <div v-if="item.movedToday" class="row-sub">heute hier · sonst {{ placeLabel(item.homeStoreId, item.homeSectionId) }}</div>
+                  <div v-else-if="item.useFallback" class="row-sub">statt {{ preferredName(item) }}</div>
+                </div>
+                <span class="row-amount">{{ item.display }}</span>
+                <button class="row-more" aria-label="Details" @click.stop="openSheet(item)"><v-icon icon="mdi-dots-horizontal" size="20" /></button>
+              </div>
+            </div>
+          </template>
+
+          <template v-if="store.reminders.length">
+            <div class="section-name">Bei Gelegenheit</div>
+            <div v-for="r in store.reminders" :key="r.id" class="row" :class="{ checked: r.state !== 'open' }" @click="setFree(r, r.state === 'open' ? 'in_cart' : 'open')">
+              <span class="check"><v-icon :icon="r.state === 'open' ? 'mdi-bookmark-outline' : 'mdi-bookmark-check'" :color="r.state === 'open' ? undefined : 'primary'" size="22" /></span>
+              <div class="row-main"><div class="row-name">{{ r.text }}</div></div>
+              <span class="row-amount">{{ r.display }}</span>
+              <button class="row-more" aria-label="Entfernen" @click.stop="deleteFree(r)"><v-icon icon="mdi-close" size="18" /></button>
+            </div>
+          </template>
+
+          <template v-if="store.done.length">
+            <button class="in-cart" @click="toggleDone(store.key)">
+              <v-icon :icon="store.doneOpen ? 'mdi-chevron-up' : 'mdi-cart-check'" size="18" class="mr-2" />{{ store.done.length }} im Wagen
+            </button>
+            <div v-if="store.doneOpen">
+              <div v-for="item in store.done" :key="item.key" class="row checked" @click="tapShop(item)">
+                <span class="check"><v-icon icon="mdi-check-circle" color="primary" size="24" /></span>
+                <div class="row-main"><div class="row-name">{{ item.name }}</div></div>
+                <span class="row-amount">{{ item.display }}</span>
+              </div>
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <section v-if="laterItems.length" class="store-card later">
+        <div class="store-head static">
+          <v-icon icon="mdi-clock-outline" size="18" class="mr-2 text-medium-emphasis" />
+          <span class="store-name">Später kaufen</span>
+        </div>
+        <div class="store-body">
+          <div v-for="item in laterItems" :key="item.key" class="row" :class="{ checked: item.state !== 'open' }" @click="tapShop(item)">
+            <span class="check"><v-icon :icon="item.state === 'in_cart' ? 'mdi-check-circle' : 'mdi-circle-outline'" size="24" /></span>
+            <div class="row-main">
+              <div class="row-name">{{ item.name }}</div>
+              <div class="row-sub">ab {{ shortDate(item.buyFrom) }} · {{ item.store?.name }}</div>
+            </div>
+            <span class="row-amount">{{ item.display }}</span>
+          </div>
+        </div>
+      </section>
 
       <div v-if="!openCount && !laterItems.length" class="text-center pa-6">
         <v-icon icon="mdi-party-popper" size="48" color="primary" class="mb-2" />
         <p>Alles erledigt!</p>
       </div>
-      <v-btn v-if="inCartCount" block color="primary" variant="tonal" prepend-icon="mdi-check-all" class="mb-3" @click="finishDialog = true">
+      <v-btn v-if="inCartCount" block color="primary" variant="flat" size="large" prepend-icon="mdi-check-all" class="mb-3 finish-btn" @click="finishDialog = true">
         Einkauf fertig
       </v-btn>
     </template>
@@ -438,13 +523,37 @@ const sourceLabel = s => s.type === 'manual'
             <v-list-item v-if="selected.state !== 'have'" prepend-icon="mdi-home-variant" title="Haben wir noch" @click="sheetAction({ state: 'have' })" />
             <v-list-item v-if="selected.state !== 'skip'" prepend-icon="mdi-cancel" title="Brauche ich nicht" @click="sheetAction({ state: 'skip' })" />
             <v-list-item v-if="selected.state !== 'open'" prepend-icon="mdi-cart-arrow-down" title="Doch kaufen" @click="sheetAction({ state: 'open' })" />
+            <v-list-item prepend-icon="mdi-swap-horizontal" title="Heute woanders kaufen …" subtitle="nur für diesen Einkauf" @click="openPlace(selected)" />
+            <v-list-item v-if="selected.movedToday" prepend-icon="mdi-undo-variant" :title="`Zurück zu ${placeLabel(selected.homeStoreId, selected.homeSectionId)}`"
+              @click="sheet = false; moveItem(selected, selected.homeStoreId, selected.homeSectionId)" />
           </template>
-          <v-list-item v-else prepend-icon="mdi-delete-outline" title="Entfernen" @click="deleteFree(selected)" />
+          <template v-else>
+            <v-list-item prepend-icon="mdi-store-marker-outline" title="Einsortieren …" :subtitle="placeLabel(selected.storeId, selected.sectionId)" @click="openPlace(selected)" />
+            <v-list-item prepend-icon="mdi-delete-outline" title="Entfernen" @click="deleteFree(selected)" />
+          </template>
         </v-list>
       </v-card>
     </v-bottom-sheet>
 
     <TripDialog v-model="tripDialog" :trip="trip" @saved="onTripSaved" />
+
+    <!-- Laden und Abschnitt wählen -->
+    <v-dialog v-model="placeDialog" max-width="440" scrollable>
+      <v-card v-if="placeItem" :title="placeItem.isFree ? `${placeItem.name} einsortieren` : `${placeItem.name} heute kaufen bei …`">
+        <v-card-text class="pt-1">
+          <div v-for="st in data.stores" :key="st.id" class="mb-3">
+            <div class="d-flex align-center mb-1">
+              <span class="store-dot mr-2" :style="{ background: st.color }" /><span class="font-weight-medium">{{ st.name }}</span>
+            </div>
+            <div class="d-flex flex-wrap ga-2">
+              <v-chip v-for="sec in st.sections" :key="sec.id" size="small" variant="outlined" @click="moveItem(placeItem, st.id, sec.id)">{{ sec.name }}</v-chip>
+            </div>
+          </div>
+          <v-chip v-if="placeItem.isFree && placeItem.storeId" size="small" variant="text" prepend-icon="mdi-close" @click="moveItem(placeItem, null, null)">Ohne Laden</v-chip>
+        </v-card-text>
+        <v-card-actions><v-spacer /><v-btn variant="text" @click="placeDialog = false">Abbrechen</v-btn></v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-dialog v-model="finishDialog" max-width="400">
       <v-card title="Einkauf fertig?">
@@ -470,8 +579,36 @@ const sourceLabel = s => s.type === 'manual'
 .einkauf :deep(.v-list-item__prepend > .v-icon ~ .v-list-item__spacer) { width: 14px; }
 .done { opacity: 0.45; }
 .done :deep(.v-list-item-title) { text-decoration: line-through; }
-.store { border-top: 4px solid transparent; }
-.section-name { text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* Einkaufen: eine Karte pro Laden, fertige Läden klappen zu */
+.store-card { background: rgb(var(--v-theme-surface)); border-radius: 16px; margin-bottom: 12px; overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 16px rgba(37, 99, 235, 0.05); }
+.store-card.finished { opacity: 0.75; }
+.store-head { display: flex; align-items: center; width: 100%; padding: 14px 16px 12px; background: none; border: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.store-head.static { cursor: default; }
+.store-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.store-name { font-size: 1.05rem; font-weight: 600; margin-left: 10px; }
+.store-count { font-size: 0.85rem; font-variant-numeric: tabular-nums; color: rgba(var(--v-theme-on-surface), 0.55); }
+.store-progress { height: 3px; margin: 0 16px; background: rgba(var(--v-theme-on-surface), 0.06); border-radius: 2px; overflow: hidden; }
+.store-progress > div { height: 100%; transition: width 0.3s ease; }
+.store-body { padding: 4px 0 8px; }
+.section-name { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(var(--v-theme-on-surface), 0.45); padding: 12px 16px 2px; }
+.rows { min-height: 6px; }
+.row { display: flex; align-items: center; gap: 12px; padding: 9px 8px 9px 14px; min-height: 52px; cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: background 0.15s; }
+.row:active { background: rgba(var(--v-theme-primary), 0.05); }
+.check { display: flex; color: rgba(var(--v-theme-on-surface), 0.35); }
+.row-main { flex: 1; min-width: 0; }
+.row-name { font-size: 1rem; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-sub { font-size: 0.78rem; color: rgb(var(--v-theme-warning)); margin-top: 1px; }
+.row-amount { font-size: 0.9rem; color: rgba(var(--v-theme-on-surface), 0.55); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.row-more { display: flex; padding: 6px; border: 0; background: none; border-radius: 50%; color: rgba(var(--v-theme-on-surface), 0.35); cursor: pointer; }
+.row.checked .row-name { text-decoration: line-through; color: rgba(var(--v-theme-on-surface), 0.4); }
+.row.checked .row-amount { opacity: 0.5; }
+.tag { font-size: 0.65rem; font-weight: 600; color: rgb(var(--v-theme-primary)); background: rgba(var(--v-theme-primary), 0.1); border-radius: 6px; padding: 1px 6px; margin-left: 8px; vertical-align: 2px; }
+.row-ghost { opacity: 0.3; }
+.row-chosen { background: rgba(var(--v-theme-primary), 0.08); box-shadow: 0 4px 16px rgba(15, 23, 42, 0.15); }
+.in-cart { display: flex; align-items: center; margin: 6px 16px 2px; padding: 6px 10px; border: 0; border-radius: 8px; background: rgba(var(--v-theme-on-surface), 0.04); font: inherit; font-size: 0.85rem; color: rgba(var(--v-theme-on-surface), 0.6); cursor: pointer; }
+.finish-btn { border-radius: 14px !important; letter-spacing: 0; text-transform: none; }
 .phase-toggle { gap: 8px; border: 0 !important; }
 .phase-toggle .v-btn { border: 1px solid rgba(var(--v-theme-primary), 0.35) !important; border-radius: 10px !important; }
 .quick-add {

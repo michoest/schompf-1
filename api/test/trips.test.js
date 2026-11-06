@@ -4,6 +4,7 @@ import { openDatabase, newId, now } from '../src/db/index.js';
 import { suggestTripRange } from '../src/domain/dates.js';
 import { saveDish } from '../src/repo/dishes.js';
 import { groupDefaults, saveProduct } from '../src/repo/products.js';
+import { updateFreeItem } from '../src/repo/trips.js';
 import { saveMeal, deleteMeal } from '../src/repo/meals.js';
 import {
   createTrip, buildTripList, setTripItem, addFreeItem, collectNeeds, suggestTrip, syncMealToTrip, previewMealSync, updateTrip,
@@ -248,6 +249,38 @@ test('Orte pro Produkt: Vorschlag aus der Warengruppe beim Anlegen, danach gilt 
   const item = line(buildTripList(db, trip(), '2026-10-14'), 'Ckerl');
   assert.deepEqual([item.store.name, item.section.name, item.hasFallback], ['We', 'Rest', false]);
   assert.throws(() => saveProduct(db, { storeId: ids.markt, sectionId: ids.weRest }, created.id), /gehört nicht zu diesem Laden/);
+});
+
+test('Zuschlag pro Gericht: nur die Einkaufsliste rechnet ihn drauf', () => {
+  const kuchen = saveDish(db, { name: 'Matenkuchen', extraPercent: 10, ingredients: [{ productName: 'Maten', amount: 100, unit: 'g' }] }).dish;
+  assert.equal(kuchen.extraPercent, 10);
+  assert.equal(kuchen.ingredients[0].amount, 100, 'Rezeptmenge bleibt');
+  meal('2026-10-14', kuchen);   // 2 Portionen → 200 g + 10 %
+  assert.equal(line(buildTripList(db, trip(), '2026-10-14'), 'Maten').display, '220 g');
+  assert.throws(() => saveDish(db, { id: kuchen.id, extraPercent: 150 }), /Zuschlag/);
+});
+
+test('Heute woanders kaufen: nur für diese Runde; freie Artikel einsortieren', () => {
+  meal('2026-10-14', ids.nese);
+  const t = trip();
+  setTripItem(db, t.id, ids.ghetti, 'now', { storeId: ids.markt, sectionId: ids.metzger });
+  let ghetti = line(buildTripList(db, t, '2026-10-14'), 'Ghetti');
+  assert.deepEqual([ghetti.store.name, ghetti.section.name, ghetti.movedToday], ['Markt', 'Metzger', true]);
+  assert.throws(() => setTripItem(db, t.id, ids.ghetti, 'now', { storeId: ids.markt, sectionId: ids.weRest }), /gehört nicht/);
+
+  const free = addFreeItem(db, { tripId: t.id, text: 'Hannisbeers' });
+  updateFreeItem(db, free.id, { storeId: ids.markt, sectionId: ids.metzger });
+  let list = buildTripList(db, t, '2026-10-14');
+  assert.deepEqual([list.freeItems[0].storeId, list.freeItems[0].sectionId], [ids.markt, ids.metzger]);
+
+  const next = finishTrip(db);
+  list = buildTripList(db, next, '2026-10-14');
+  ghetti = line(list, 'Ghetti');
+  assert.deepEqual([ghetti.store.name, ghetti.movedToday], ['We', false], 'nach „Einkauf fertig“ wieder am normalen Platz');
+  assert.equal(list.freeItems[0].sectionId, ids.metzger, 'freier Artikel behält seinen Platz');
+  setTripItem(db, next.id, ids.ghetti, 'now', { storeId: ids.markt });
+  setTripItem(db, next.id, ids.ghetti, 'now', { storeId: null });
+  assert.equal(line(buildTripList(db, next, '2026-10-14'), 'Ghetti').movedToday, false, 'zurücksetzen');
 });
 
 test('Haltbarkeit: späterer Anteil wird getrennt und mit Datum ausgewiesen', () => {
