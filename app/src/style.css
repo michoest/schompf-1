@@ -17,7 +17,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: #F0FDFA;
+  background: #F4F7FE;
 }
 
 /* Custom scrollbar */
@@ -31,12 +31,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(13, 148, 136, 0.3);
+  background: rgba(37, 99, 235, 0.25);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(13, 148, 136, 0.5);
+  background: rgba(37, 99, 235, 0.45);
 }
 
 /* Smooth transitions */
@@ -53,7 +53,7 @@ body {
 
 /* Fresh accent for active items */
 .v-list-item--active {
-  background: rgba(13, 148, 136, 0.1) !important;
+  background: rgba(37, 99, 235, 0.08) !important;
 }
 
 /* Better focus states */
@@ -78,3 +78,6 @@ body {
 /* Moderner, ruhiger: Knöpfe und Tabs ohne Großbuchstaben und Sperrschrift */
 .v-btn { text-transform: none !important; letter-spacing: 0 !important; font-weight: 500; }
 .v-toolbar.bg-primary { background: linear-gradient(120deg, #2563EB 0%, #4F46E5 100%) !important; }
+
+/* Bottom Sheets: kein eigener Rand/Schatten des Containers, bis an den unteren Bildschirmrand */
+.v-bottom-sheet > .v-bottom-sheet__content.v-overlay__content { box-shadow: none; background: transparent; bottom: 0; }

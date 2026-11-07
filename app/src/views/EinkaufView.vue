@@ -494,45 +494,70 @@ const sourceLabel = s => s.type === 'manual'
 
     <!-- Details zu einem Artikel -->
     <v-bottom-sheet v-model="sheet">
-      <v-card v-if="selected">
-        <v-card-title class="d-flex align-center">
-          {{ selected.name }}
-          <v-spacer />
-          <span class="text-body-1 text-medium-emphasis">{{ selected.display }}</span>
-        </v-card-title>
-        <v-card-text>
-          <template v-if="!selected.isFree">
-            <div v-if="selected.override" class="text-caption mb-2">Angepasst; laut Plan: {{ selected.needed.map(n => formatAmount(n.amount, n.unit, data.units)).join(' + ') }}</div>
-            <div class="text-caption text-medium-emphasis mb-1">Gebraucht für</div>
-            <div v-for="(s, i) in selected.sources" :key="i" class="text-body-2">{{ sourceLabel(s) }}</div>
-            <div v-if="selected.updatedBy" class="text-caption text-medium-emphasis mt-2">Zuletzt geändert von {{ selected.updatedBy }}</div>
-
-            <div class="d-flex align-center ga-2 mt-4">
-              <v-text-field v-model="amountInput" label="Menge" inputmode="decimal" density="compact" hide-details style="max-width: 110px" />
-              <v-select v-model="unitInput" :items="data.units" item-title="singular" item-value="code" density="compact" hide-details style="max-width: 140px" />
-              <v-btn variant="tonal" @click="saveAmount">Setzen</v-btn>
-              <v-btn v-if="selected.override" variant="text" size="small" @click="sheetAction({ amount: null })">Zurücksetzen</v-btn>
+      <div v-if="selected" class="sheet">
+        <div class="sheet-handle" />
+        <div class="sheet-head">
+          <div class="flex-grow-1 min-w-0">
+            <div class="sheet-title">{{ selected.name }}</div>
+            <div class="sheet-place">
+              <span class="store-dot mr-1" :style="{ background: storeInfo(selected.isFree ? selected.storeId : selected.store?.id)?.color ?? 'rgba(var(--v-theme-on-surface), 0.25)' }" />
+              {{ selected.isFree ? placeLabel(selected.storeId, selected.sectionId) : placeLabel(selected.store?.id, selected.section?.id) }}
             </div>
-          </template>
-        </v-card-text>
-        <v-list density="comfortable">
+          </div>
+          <span v-if="selected.display" class="sheet-amount">{{ selected.display }}</span>
+        </div>
+
+        <template v-if="!selected.isFree">
+          <div class="sheet-block">
+            <div class="sheet-label">Gebraucht für</div>
+            <div v-for="(s, i) in selected.sources" :key="i" class="source">{{ sourceLabel(s) }}</div>
+            <div v-if="selected.override" class="source text-medium-emphasis">Angepasst – laut Plan {{ selected.needed.map(n => formatAmount(n.amount, n.unit, data.units)).join(' + ') }}</div>
+            <div v-if="selected.updatedBy" class="source text-medium-emphasis">Zuletzt geändert von {{ selected.updatedBy }}</div>
+          </div>
+          <div class="sheet-block d-flex align-center ga-2">
+            <v-text-field v-model="amountInput" placeholder="Menge" inputmode="decimal" density="compact" hide-details style="max-width: 100px" />
+            <v-select v-model="unitInput" :items="data.units" item-title="singular" item-value="code" density="compact" hide-details style="max-width: 130px" />
+            <v-btn variant="tonal" color="primary" @click="saveAmount">Setzen</v-btn>
+            <v-btn v-if="selected.override" variant="text" size="small" @click="sheetAction({ amount: null })">Plan</v-btn>
+          </div>
+        </template>
+
+        <div class="sheet-actions">
           <template v-if="!selected.isFree">
-            <v-list-item v-if="selected.hasFallback && !selected.useFallback" prepend-icon="mdi-store-alert-outline"
-              :title="`Gibt's hier nicht → ${fallbackName(selected)}`" @click="sheetAction({ useFallback: true })" />
-            <v-list-item v-if="selected.useFallback" prepend-icon="mdi-store-outline" :title="`Doch bei ${preferredName(selected)}`" @click="sheetAction({ useFallback: false })" />
-            <v-list-item v-if="selected.state !== 'have'" prepend-icon="mdi-home-variant" title="Haben wir noch" @click="sheetAction({ state: 'have' })" />
-            <v-list-item v-if="selected.state !== 'skip'" prepend-icon="mdi-cancel" title="Brauche ich nicht" @click="sheetAction({ state: 'skip' })" />
-            <v-list-item v-if="selected.state !== 'open'" prepend-icon="mdi-cart-arrow-down" title="Doch kaufen" @click="sheetAction({ state: 'open' })" />
-            <v-list-item prepend-icon="mdi-swap-horizontal" title="Heute woanders kaufen …" subtitle="nur für diesen Einkauf" @click="openPlace(selected)" />
-            <v-list-item v-if="selected.movedToday" prepend-icon="mdi-undo-variant" :title="`Zurück zu ${placeLabel(selected.homeStoreId, selected.homeSectionId)}`"
-              @click="sheet = false; moveItem(selected, selected.homeStoreId, selected.homeSectionId)" />
+            <button class="action" @click="openPlace(selected)">
+              <v-icon icon="mdi-swap-horizontal" /><span>Heute woanders kaufen …<small>nur für diesen Einkauf</small></span>
+            </button>
+            <button v-if="selected.movedToday" class="action" @click="sheet = false; moveItem(selected, selected.homeStoreId, selected.homeSectionId)">
+              <v-icon icon="mdi-undo-variant" /><span>Zurück zu {{ placeLabel(selected.homeStoreId, selected.homeSectionId) }}</span>
+            </button>
+            <button v-if="selected.hasFallback && !selected.useFallback && !selected.movedToday" class="action" @click="sheetAction({ useFallback: true })">
+              <v-icon icon="mdi-store-alert-outline" /><span>Gibt's hier nicht → {{ fallbackName(selected) }}</span>
+            </button>
+            <button v-if="selected.useFallback" class="action" @click="sheetAction({ useFallback: false })">
+              <v-icon icon="mdi-store-outline" /><span>Doch bei {{ preferredName(selected) }}</span>
+            </button>
+            <div class="action-sep" />
+            <button v-if="selected.state !== 'have'" class="action" @click="sheetAction({ state: 'have' })">
+              <v-icon icon="mdi-home-variant-outline" /><span>Haben wir noch</span>
+            </button>
+            <button v-if="selected.state !== 'open'" class="action" @click="sheetAction({ state: 'open' })">
+              <v-icon icon="mdi-cart-arrow-down" /><span>Doch kaufen</span>
+            </button>
+            <button v-if="selected.state !== 'skip'" class="action danger" @click="sheetAction({ state: 'skip' })">
+              <v-icon icon="mdi-cancel" /><span>Brauche ich nicht<small>nur für diesen Einkauf</small></span>
+            </button>
           </template>
           <template v-else>
-            <v-list-item prepend-icon="mdi-store-marker-outline" title="Einsortieren …" :subtitle="placeLabel(selected.storeId, selected.sectionId)" @click="openPlace(selected)" />
-            <v-list-item prepend-icon="mdi-delete-outline" title="Entfernen" @click="deleteFree(selected)" />
+            <button class="action" @click="openPlace(selected)">
+              <v-icon icon="mdi-store-marker-outline" /><span>Einsortieren …<small>Laden und Abschnitt wählen</small></span>
+            </button>
+            <div class="action-sep" />
+            <button class="action danger" @click="deleteFree(selected)">
+              <v-icon icon="mdi-delete-outline" /><span>Von der Liste entfernen</span>
+            </button>
           </template>
-        </v-list>
-      </v-card>
+        </div>
+      </div>
     </v-bottom-sheet>
 
     <TripDialog v-model="tripDialog" :trip="trip" @saved="onTripSaved" />
@@ -608,6 +633,24 @@ const sourceLabel = s => s.type === 'manual'
 .row-ghost { opacity: 0.3; }
 .row-chosen { background: rgba(var(--v-theme-primary), 0.08); box-shadow: 0 4px 16px rgba(15, 23, 42, 0.15); }
 .in-cart { display: flex; align-items: center; margin: 6px 16px 2px; padding: 6px 10px; border: 0; border-radius: 8px; background: rgba(var(--v-theme-on-surface), 0.04); font: inherit; font-size: 0.85rem; color: rgba(var(--v-theme-on-surface), 0.6); cursor: pointer; }
+/* Detail-Sheet: oben rund, unten bis an den Rand (mit Platz für die Home-Leiste) */
+.sheet { background: rgb(var(--v-theme-surface)); border-radius: 22px 22px 0 0; padding: 8px 0 calc(12px + env(safe-area-inset-bottom)); max-height: 85vh; overflow-y: auto; }
+.sheet-handle { width: 40px; height: 5px; border-radius: 3px; background: rgba(var(--v-theme-on-surface), 0.15); margin: 0 auto 10px; }
+.sheet-head { display: flex; align-items: flex-start; gap: 12px; padding: 4px 20px 12px; }
+.sheet-title { font-size: 1.3rem; font-weight: 600; line-height: 1.25; }
+.sheet-place { display: flex; align-items: center; font-size: 0.85rem; color: rgba(var(--v-theme-on-surface), 0.55); margin-top: 3px; }
+.sheet-amount { font-size: 1.05rem; font-weight: 600; color: rgb(var(--v-theme-primary)); background: rgba(var(--v-theme-primary), 0.08); border-radius: 10px; padding: 4px 10px; white-space: nowrap; }
+.sheet-block { margin: 0 16px 10px; padding: 10px 12px; border-radius: 14px; background: rgba(var(--v-theme-on-surface), 0.035); }
+.sheet-label { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(var(--v-theme-on-surface), 0.45); margin-bottom: 4px; }
+.source { font-size: 0.875rem; line-height: 1.45; }
+.sheet-actions { padding: 2px 8px 0; }
+.action { display: flex; align-items: center; gap: 16px; width: 100%; padding: 12px; border: 0; border-radius: 12px; background: none; font: inherit; font-size: 1rem; color: inherit; text-align: left; cursor: pointer; }
+.action:active { background: rgba(var(--v-theme-on-surface), 0.05); }
+.action .v-icon { color: rgba(var(--v-theme-on-surface), 0.55); }
+.action span { display: flex; flex-direction: column; }
+.action small { font-size: 0.75rem; color: rgba(var(--v-theme-on-surface), 0.5); }
+.action.danger, .action.danger .v-icon { color: rgb(var(--v-theme-error)); }
+.action-sep { height: 1px; margin: 4px 12px; background: rgba(var(--v-theme-on-surface), 0.07); }
 .finish-btn { border-radius: 14px !important; letter-spacing: 0; text-transform: none; }
 .phase-toggle { gap: 8px; border: 0 !important; }
 .phase-toggle .v-btn { border: 1px solid rgba(var(--v-theme-primary), 0.35) !important; border-radius: 10px !important; }

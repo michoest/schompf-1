@@ -39,6 +39,8 @@ curl -fsS http://127.0.0.1:3010/health && echo
 REMOTE
 
 (cd app && npx vite build --mode staging --logLevel warn)
+# iOS fragt teils die Standardnamen ab (/apple-touch-icon.png …) → auf Dev auch dort die orangen Icons
+cp app/public/dev/*.png app/public/dev/favicon.svg app/dist/
 rsync -a --delete app/dist/ pi5:/srv/schompf-dev/
 ssh pi5 'chmod -R u=rwX,go=rX /srv/schompf-dev'  # Caddy muss lesen dürfen
 echo "Dev deployt: $(git log -1 --format='%h %s') → https://schompf-dev.michoest.com"

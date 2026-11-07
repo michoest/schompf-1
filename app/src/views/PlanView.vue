@@ -216,7 +216,11 @@ onMounted(async () => {
 <style scoped>
 .day { scroll-margin-top: 72px; }
 .trip-banner { background: linear-gradient(120deg, rgba(37, 99, 235, 0.10), rgba(79, 70, 229, 0.10)); box-shadow: none !important; }
-.day.today { border-left: 4px solid rgb(var(--v-theme-primary)); }
+.day.today {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.07), rgba(79, 70, 229, 0.05)) !important;
+  box-shadow: 0 0 0 1.5px rgba(var(--v-theme-primary), 0.25), 0 4px 16px rgba(37, 99, 235, 0.08) !important;
+}
+.day.today .day-header > span:first-child { color: rgb(var(--v-theme-primary)); }
 .day.past { opacity: 0.7; }
 .slot-row { display: grid; grid-template-columns: 36px 1fr 32px; align-items: start; padding: 0 8px 0 14px; }
 .slot-row + .slot-row { border-top: 1px solid rgba(var(--v-theme-on-surface), 0.05); }
