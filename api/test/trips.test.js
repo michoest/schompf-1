@@ -251,6 +251,18 @@ test('Orte pro Produkt: Vorschlag aus der Warengruppe beim Anlegen, danach gilt 
   assert.throws(() => saveProduct(db, { storeId: ids.markt, sectionId: ids.weRest }, created.id), /gehört nicht zu diesem Laden/);
 });
 
+test('Haltbarkeit 0 Tage: frisch, steht erst am Tag selbst in der normalen Liste', () => {
+  db.prepare('UPDATE products SET shelf_life_days = 0 WHERE id = ?').run(ids.maten);
+  meal('2026-10-16', ids.lat);
+  const t = trip();
+  const before = line(buildTripList(db, t, '2026-10-15'), 'Maten', 'later');
+  assert.equal(before.buyFrom, '2026-10-16');
+  assert.equal(line(buildTripList(db, t, '2026-10-15'), 'Maten'), undefined);
+  assert.equal(line(buildTripList(db, t, '2026-10-16'), 'Maten').display, '300 g');
+  assert.equal(saveProduct(db, { shelfLifeDays: 0 }, ids.maten).shelfLifeDays, 0);
+  assert.throws(() => saveProduct(db, { shelfLifeDays: -1 }, ids.maten), /ab 0/);
+});
+
 test('Zuschlag pro Gericht: nur die Einkaufsliste rechnet ihn drauf', () => {
   const kuchen = saveDish(db, { name: 'Matenkuchen', extraPercent: 10, ingredients: [{ productName: 'Maten', amount: 100, unit: 'g' }] }).dish;
   assert.equal(kuchen.extraPercent, 10);

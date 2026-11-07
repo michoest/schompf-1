@@ -104,7 +104,8 @@ async function remove() {
         <v-list-item v-for="p in b.products" :key="p.id" :title="p.name" :subtitle="subtitle(p)" @click="edit(p)">
           <template #append>
             <v-icon v-if="p.isStaple" icon="mdi-home-variant" size="small" class="mr-1" title="Grundvorrat" />
-            <v-icon v-if="p.shelfLifeDays" icon="mdi-clock-outline" size="small" class="mr-1" :title="`${p.shelfLifeDays} Tage haltbar`" />
+            <v-icon v-if="p.shelfLifeDays != null" icon="mdi-clock-outline" size="small" class="mr-1"
+              :title="p.shelfLifeDays === 0 ? 'frisch – am Tag selbst kaufen' : `${p.shelfLifeDays} Tage haltbar`" />
           </template>
         </v-list-item>
       </v-list>
@@ -122,7 +123,8 @@ async function remove() {
           <div class="text-overline">Zuhause</div>
           <v-select v-model="form.storageLocationId" :items="data.structure?.storageLocations ?? []" item-title="name" item-value="id" label="Aufbewahrung" clearable />
           <v-switch v-model="form.isStaple" label="Grundvorrat (haben wir eigentlich immer)" color="primary" hide-details class="mb-2" />
-          <v-text-field v-model="form.shelfLifeDays" label="Haltbarkeit in Tagen (nur wenn kurz)" inputmode="numeric" />
+          <v-text-field v-model="form.shelfLifeDays" label="Haltbarkeit in Tagen (nur wenn kurz)" inputmode="numeric"
+            hint="0 = frisch, erst am Tag selbst kaufen · leer = hält länger" persistent-hint />
           <div class="text-overline">Einordnung</div>
           <v-select v-model="form.groupId" :items="data.groups" item-title="name" item-value="id" label="Warengruppe" clearable
             :hint="form.id ? '' : 'Schlägt Laden, Abschnitt und Aufbewahrung vor'" persistent-hint @update:model-value="onGroupChange" />

@@ -57,7 +57,8 @@ export function saveProduct(db, input, id = null) {
   const storageLocationId = pick('storageLocationId');
   if (storageLocationId && !db.prepare('SELECT 1 FROM storage_locations WHERE id = ?').get(storageLocationId)) errors.push('Aufbewahrungsort unbekannt');
   const shelfLifeDays = 'shelfLifeDays' in input ? input.shelfLifeDays : before?.shelfLifeDays ?? null;
-  if (shelfLifeDays != null && !(Number.isInteger(Number(shelfLifeDays)) && Number(shelfLifeDays) > 0)) errors.push('Haltbarkeit muss eine ganze Zahl > 0 sein');
+  // 0 = frisch: erst am Tag selbst kaufen
+  if (shelfLifeDays != null && !(Number.isInteger(Number(shelfLifeDays)) && Number(shelfLifeDays) >= 0)) errors.push('Haltbarkeit muss eine ganze Zahl ab 0 sein');
   if (errors.length) throw new ValidationError(errors);
 
   const row = {

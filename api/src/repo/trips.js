@@ -184,7 +184,7 @@ function commitMeals(db, trip, mealIds, addedAt = now()) {
     db.prepare('UPDATE meals SET trip_id = ? WHERE id = ?').run(trip.id, mealId);
     for (const source of collectNeeds(db, { mealIds: [mealId] })) {
       const days = shelfLife.get(source.productId);
-      const buyFrom = days ? addDays(source.date, -days) : null;
+      const buyFrom = days != null ? addDays(source.date, -days) : null;   // 0 Tage = am Tag selbst kaufen
       const part = buyFrom && buyFrom > today ? 'later' : 'now';
       if (!before.has(source.productId)) reopenDoneLine(db, trip.id, source.productId, part, today);
       insert.run({ tripId: trip.id, ...source, viaDish: source.viaDish ?? null, part, buyFrom, addedAt });
