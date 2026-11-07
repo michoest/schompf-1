@@ -85,7 +85,8 @@ test('Einkauf anlegen, abhaken; andere Geräte bekommen die Änderung live', asy
   await call('POST', '/api/meals', { date: '2026-10-15', slotId: 'dinner', kind: 'dish', dishId: dish.id });
   const events = [];
   const controller = new AbortController();
-  const stream = await fetch(`${base}/api/events?token=${token}`, { signal: controller.signal });
+  const stream = await fetch(`${base}/api/events`, { headers: { authorization: `Bearer ${token}` }, signal: controller.signal });
+  assert.equal((await fetch(`${base}/api/events?token=${token}`)).status, 401, 'Token nur noch im Header');
   assert.equal(stream.headers.get('content-type'), 'text/event-stream');
   const reader = stream.body.getReader();
   const reading = (async () => {

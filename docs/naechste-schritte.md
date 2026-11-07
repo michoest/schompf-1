@@ -26,10 +26,8 @@ Stand: 2026-11-07. Für eine neue Session: zuerst `CLAUDE.md` lesen (Infrastrukt
 - **Produkt-Zuordnung**: Der Nutzer geht die Tabelle `~/Downloads/schompf-produkte-live.xlsx` durch (Einkaufsort, Aufbewahrung …).
   Danach: `produkte-import - --probe` zeigen, nach OK übernehmen. Dazu passt die Kairos-Notiz „Einige Items vom Käsestand müssten zu Rewe“
   (archivieren, wenn die Tabelle übernommen ist). Antipastis steht vorläufig bei We › Rest.
-- **Sicherung der alten Git-Historie** löschen, wenn der Nutzer zustimmt: `../schompf-vor-bereinigung.bundle`, lokale Branches `backup/*-vor-bereinigung`,
-  Tag `backup/vor-umstieg-alt`.
-- 7 Gerichte im Entwurf haben noch kein Rezept.
-- `docs/konzept.md` beschreibt die Einkaufsliste noch als eingefrorene Liste pro Einkauf – bei Gelegenheit an das durchgehende Modell anpassen.
+- 7 Gerichte im Entwurf haben noch kein Rezept: Kelhuhn (4 Zutaten), Melette, Migiana (chefkoch-Link), Obstteller, Pinatsagne (chefkoch-Link),
+  Pätzle mit Rahmpignons, Çaibowl – Rezepte liefert der Nutzer als Markdown in den Downloads.
 
 ## Etappe 3 (läuft über die Nutzung)
 
@@ -38,8 +36,7 @@ erledigen: `scripts/pi.sh prod erledigt <ID> <was geändert wurde>`. Wünsche ko
 
 ## Kleinere technische Punkte
 
-- Live-Sync liest `/api/events` per fetch mit Authorization-Header. Der Query-Parameter `?token=` wird nur noch für alte, gecachte App-Versionen
-  angenommen und kann in `api/src/app.js` (`requireDevice`) entfernt werden.
+- Live-Sync liest `/api/events` per fetch mit Authorization-Header (der alte `?token=`-Weg ist seit 2026-11-07 entfernt).
 - Prod-API lauscht nur auf `127.0.0.1:3000`. Lokal ist Port 3000 oft von einem anderen Projekt belegt: API dann mit `PORT=3005` starten und
   Vite mit `VITE_API_PROXY=http://127.0.0.1:3005 npx vite --port 5174`.
 - UI-Tests ad hoc mit Playwright (Chrome aus `/Applications`, `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`). Ziehen testen mit Maus-Ereignissen

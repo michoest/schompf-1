@@ -35,9 +35,7 @@ export function createApp(db, { corsOrigins = ['http://localhost:5173'] } = {}) 
 
   const requireDevice = (req, res, next) => {
     const header = req.get('authorization') ?? '';
-    // Ältere App-Versionen (EventSource) schicken das Token für /api/events als Query-Parameter.
-    // Neue lesen den Stream per fetch mit Header; den Query-Parameter später entfernen.
-    const token = header.startsWith('Bearer ') ? header.slice(7) : (req.path === '/events' ? req.query.token : null);
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
     const auth = authenticate(db, token);
     if (!auth) return res.status(401).json({ error: 'Nicht angemeldet' });
     req.person = auth.person;
